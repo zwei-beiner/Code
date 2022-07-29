@@ -18,7 +18,7 @@ def _make_matrix(M: np.int_, n: np.ndarray, d: np.ndarray, k_outer: np.float_, n
         return k_outer * np.sqrt((n / n_outer) ** 2 - np.sin(theta_outer) ** 2)
 
     k_x: np.ndarray = calc_k_x(n)
-    k_x_substrate: np.float = calc_k_x(n_substrate)
+    k_x_substrate: np.float_ = calc_k_x(n_substrate)
     phi: np.ndarray = k_x * d
 
     alphas: list[np.ndarray] = [
