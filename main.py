@@ -17,6 +17,7 @@ def _make_matrix(M: np.int_, n: np.ndarray, d: np.ndarray, k_outer: np.float_, n
     def calc_k_x(n):
         return k_outer * np.sqrt((n / n_outer) ** 2 - np.sin(theta_outer) ** 2)
 
+    k_x_outer: np.ndarray = k_outer * np.cos(theta_outer)
     k_x: np.ndarray = calc_k_x(n)
     k_x_substrate: np.float_ = calc_k_x(n_substrate)
     phi: np.ndarray = k_x * d
@@ -27,8 +28,10 @@ def _make_matrix(M: np.int_, n: np.ndarray, d: np.ndarray, k_outer: np.float_, n
     ]
 
     betas: list[np.ndarray] = [
+        np.array([[1, np.exp(1j * phi[0])],[k_x[0] / k_x_outer, -k_x[0] / k_x_outer * np.exp(1j * phi[0])]])
+    ] + [
         np.array([[1, np.exp(1j * phi[j])], [k_x[j], -k_x[j] * np.exp(1j * phi[j])]])
-        for j in range(0, M)
+        for j in range(1, M)
     ]
 
     columns: list[np.ndarray] = [
