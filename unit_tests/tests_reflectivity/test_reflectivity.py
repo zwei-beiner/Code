@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest import TestCase
 
 import numpy as np
@@ -86,7 +87,7 @@ class Test_reflectivity(TestCase):
 
 
     def test_antireflection_coating(self):
-        df = pd.read_csv('./data/Hobson_Baldwin_2004_anti_reflection_coating_data.txt')
+        df = pd.read_csv(Path('data') / 'Hobson_Baldwin_2004_anti_reflection_coating_data.txt')
 
         M: int = df.shape[0]
         n: np.ndarray = df.iloc[:,1].values
@@ -117,18 +118,29 @@ class Test_reflectivity(TestCase):
         # ax.set_ylim(0, 1.2)
         plt.show()
 
-    def test_dichroic(self):
-        df = pd.read_csv('./data/Hobson_Baldwin_2004_dichroic_data.txt')
+    def test_against_plot_2_from_paper_for_dichroic(self):
+        # Digitised reflectivity against wavelength plot from paper
+        df = pd.read_csv(Path('data') / 'digitised_plots_from_Hobson_Baldwin_2004_paper/plot_2_data.csv')
+
+        wavelengths: np.ndarray = df.iloc[:, 0].values * 1e-9
+        R_paper: np.ndarray = df.iloc[:, 1].values
+
+        # Sort
+        p = wavelengths.argsort()
+        wavelengths = wavelengths[p]
+        R_paper = R_paper[p]
+
+        # Calculation from multilayer data
+        df = pd.read_csv(Path('data') / 'Hobson_Baldwin_2004_dichroic_data.txt')
 
         M: int = df.shape[0]
         n: np.ndarray = df.iloc[:, 1].values
-        print(df.iloc[:, 2].values, type())
         d: np.ndarray = df.iloc[:, 2].values * 1e-9
         n_outer = 1.00
         n_substrate = 1.50
         theta_outer = 0.
 
-        wavelengths = np.linspace(600, 2300, 1000) * 1e-9
+        # wavelengths = np.linspace(600, 2300, 1000) * 1e-9
         R = np.array([reflectivity_s(
             M,
             n,
@@ -140,11 +152,49 @@ class Test_reflectivity(TestCase):
         )
         for lam in wavelengths])
 
-        fig, ax = plt.subplots()
-        # figsize=(12, 9), dpi=600
-        ax: plt.Axes
-        ax.plot(wavelengths * 1e9, R)
-        ax.set_xlabel(r'$\lambda_\mathrm{outer}$ [nm]')
-        ax.set_ylabel('R')
-        # ax.set_ylim(0, 1.2)
-        plt.show()
+        # fig, ax = plt.subplots()
+        # # figsize=(12, 9), dpi=600
+        # ax: plt.Axes
+        # # ax.plot(wavelengths, R_paper, label='R_paper')
+        # ax.plot(wavelengths, R, label='R_calculated')
+        # ax.set_xlabel(r'$\lambda_\mathrm{outer}$ [nm]')
+        # ax.set_ylabel('R')
+        # ax.legend()
+        # # ax.set_ylim(0, 1.2)
+        # plt.show()
+
+        # Compare
+        np.testing.assert_allclose(R_paper, R, rtol=0, atol=0.1443)
+
+
+    def test_against_plot_1_from_paper_for_antireflection_coating(self):
+        df = pd.read_csv('./data/digitised_plots_from_Hobson_Baldwin_2004_paper/plot_1_data.csv')
+
+        wavelengths: np.ndarray = df.iloc[:,0].values * 1e-9
+        R_paper: np.ndarray = df.iloc[:,1].values
+
+        p = wavelengths.argsort()
+        wavelengths = wavelengths[p]
+        R_paper = R_paper[p]
+
+
+
+        # fig, ax = plt.subplots()
+        # ax: plt.Axes
+        # ax.plot(wavelengths, R)
+        # plt.show()
+
+    # def test_against_plot_2_from_paper_for_dichroic(self):
+    #     df = pd.read_csv('./data/digitised_plots_from_Hobson_Baldwin_2004_paper/plot_2_data.csv')
+    #
+    #     wavelengths: np.ndarray = df.iloc[:,0].values
+    #     R: np.ndarray = df.iloc[:,1].values
+    #
+    #     p = wavelengths.argsort()
+    #     wavelengths = wavelengths[p]
+    #     R = R[p]
+    #
+    #     fig, ax = plt.subplots()
+    #     ax: plt.Axes
+    #     ax.plot(wavelengths, R)
+    #     plt.show()
