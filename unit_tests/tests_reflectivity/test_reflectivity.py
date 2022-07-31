@@ -5,19 +5,57 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from main import reflectivity_s
+from main import reflectivity_s, _make_matrix
 
 
 class Test_reflectivity(TestCase):
 
-    @classmethod
-    def _make_test_matrix_for_one_layer(cls, M: np.int_, n: np.ndarray, d: np.ndarray, k_outer: np.float_, n_outer: np.float_, n_substrate: np.float_,
-                 theta_outer: np.float_) -> np.ndarray:
-        return
+    def test_make_matrix(self):
+        def make_test_matrix_for_fabry_pelot_etalon(n: np.float_, d: np.float_, k_outer: np.float_,
+                                                    n_outer: np.float_, n_substrate: np.float_,
+                                                    theta_outer: np.float_) -> np.ndarray:
+            k_x_outer: np.complex_ = k_outer * np.cos(theta_outer)
+            k_x_layer: np.complex_ = k_outer * np.sqrt(complex((n / n_outer) ** 2 - np.sin(theta_outer) ** 2))
+            k_x_substrate: np.complex_ = k_outer * np.emath.sqrt(complex((n_substrate / n_outer) ** 2 - np.sin(theta_outer) ** 2))
 
+            phi_0: np.complex_ = k_x_layer * d
 
+            # mat = np.array([
+            #     [-1, 1, np.exp(1j * phi_0), 0],
+            #     [1, k_x_layer / k_x_outer, -k_x_layer / k_x_outer, 0],
+            #     [0, -np.exp(1j * phi_0), -1, 1],
+            #     [0, -np.exp(1j * phi_0) * k_x_layer, k_x_layer, k_x_substrate]
+            # ])
+            mat = np.array([
+                [0,0,np.exp(1j * phi_0),0],
+                [0,1,-k_x_layer / k_x_outer * np.exp(1j * phi_0), 1],
+                [-1,k_x_layer / k_x_outer,-1, k_x_substrate],
+                [1,-np.exp(1j * phi_0),k_x_layer, 0],
+                [0,-np.exp(1j * phi_0) * k_x_layer,0, 0]
+            ])
+            return mat
 
-    def test_thin_film_interference(self):
+        for n in np.linspace(0.1, 10, num=10):
+            print(n)
+            for d in np.linspace(1, 1e3, num=10) * 1e-9:
+                for wavelength in np.linspace(200, 3000, num=10) * 1e-9:
+                    for n_outer in np.linspace(0.1, 10, num=10):
+                        for n_substrate in np.linspace(0.1, 10, num=10):
+                            for theta in np.linspace(0, np.pi / 2 - 1e-3, num=10):
+                                R_correct: np.ndarray = make_test_matrix_for_fabry_pelot_etalon(
+                                    n, d, 2 * np.pi / wavelength, n_outer, n_substrate, theta
+                                )
+
+                                M = 1
+                                R_to_be_tested: np.ndarray = _make_matrix(
+                                    M, np.array([n]), np.array([d]), 2 * np.pi / wavelength, n_outer, n_substrate, theta
+                                )
+
+                                np.testing.assert_allclose(
+                                    R_correct, R_to_be_tested, rtol=0, atol=3e-5,
+                                    err_msg='R_correct:'+str(R_correct.tolist())+'\n R_to_be_tested:'+str(R_to_be_tested.tolist()))
+
+    def test_fabry_pelot_etalon(self):
         M: int = 1
         d: np.ndarray = np.array([1]) * 1e-3
         n_outer = 1.00
@@ -37,7 +75,7 @@ class Test_reflectivity(TestCase):
             # Snell's law
             sin_theta_i = n_outer * np.sin(theta_outer) / n_i
             # Note: Cosine can be complex
-            cos_theta_i = np.sqrt(1-sin_theta_i ** 2)
+            cos_theta_i = np.sqrt(1 - sin_theta_i ** 2)
             return cos_theta_i
 
         cos_theta_outer = np.cos(theta_outer)
@@ -47,6 +85,7 @@ class Test_reflectivity(TestCase):
         # Fresnel coefficents for s polarisation (TE polarisation)
         def r_ij(n_i, cos_theta_i, n_j, cos_theta_j):
             return (n_i * cos_theta_i - n_j * cos_theta_j) / (n_i * cos_theta_i + n_j * cos_theta_j)
+
         def t_ij(n_i, cos_theta_i, n_j, cos_theta_j):
             return 2 * n_i * cos_theta_i / (n_i * cos_theta_i + n_j * cos_theta_j)
 
@@ -65,39 +104,51 @@ class Test_reflectivity(TestCase):
 
         wavelengths = np.linspace(1, 10, num=10000) * 1e-6
         R_correct = np.array([reflection_coefficient(r_12, lam, n_layer, d[0], cos_theta_layer) for lam in wavelengths])
-        R_to_be_tested = np.array([reflectivity_s(M, n, d, lam, n_outer, n_substrate, theta_outer) for lam in wavelengths])
+        R_to_be_tested = np.array(
+            [reflectivity_s(M, n, d, lam, n_outer, n_substrate, theta_outer) for lam in wavelengths])
 
-        fig: plt.Figure
-        ax: plt.Axes
-        fig, ax = plt.subplots()
-        ax.plot(wavelengths, R_correct)
-        ax.plot(wavelengths, R_to_be_tested)
-        ax.legend()
-        # ax.set_ylim(0,1.1)
-        fig.show()
+        # fig: plt.Figure
+        # ax: plt.Axes
+        # fig, ax = plt.subplots()
+        # ax.plot(wavelengths, R_correct)
+        # ax.plot(wavelengths, R_to_be_tested)
+        # ax.legend()
+        # # ax.set_ylim(0,1.1)
+        # fig.show()
 
         self.assertEqual(R_correct.shape[0], R_to_be_tested.shape[0])
-        for correct, to_test in zip(R_correct, R_to_be_tested):
-            self.assertAlmostEqual(correct, to_test, places=15)
+        np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=1e-15)
+        # for correct, to_test in zip(R_correct, R_to_be_tested):
+        #     self.assertAlmostEqual(correct, to_test, places=15)
         # theta = np.linspace(0,0.06,num=1000)
         # R1 = np.array([reflection_coefficient(np.sqrt(0.5), 400* 1e-9, n_layer, d[0], np.cos(t)) for t in theta])
         # R2 = np.array([reflection_coefficient(np.sqrt(0.7), 400* 1e-9, n_layer, d[0], np.cos(t)) for t in theta])
         # R3 = np.array([reflection_coefficient(np.sqrt(0.9), 400* 1e-9, n_layer, d[0], np.cos(t)) for t in theta])
 
-
-
     def test_antireflection_coating(self):
+        # Digitised reflectivity against wavelength plot from paper
+        df = pd.read_csv(Path('data') / 'digitised_plots_from_Hobson_Baldwin_2004_paper/plot_1_data.csv')
+
+        wavelengths: np.ndarray = df.iloc[:, 0].values * 1e-9
+        R_paper: np.ndarray = df.iloc[:, 1].values
+
+        # Calculation from multilayer data
         df = pd.read_csv(Path('data') / 'Hobson_Baldwin_2004_anti_reflection_coating_data.txt')
 
+        # Sort
+        p = wavelengths.argsort()
+        wavelengths = wavelengths[p]
+        R_paper = R_paper[p]
+
+        # Calculation from multilayer data
         M: int = df.shape[0]
-        n: np.ndarray = df.iloc[:,1].values
-        d: np.ndarray = df.iloc[:,2].values * 1e-9
+        n: np.ndarray = df.iloc[:, 1].values
+        d: np.ndarray = df.iloc[:, 2].values * 1e-9
         n_outer = 1.00
         n_substrate = 1.50
         theta_outer = 0.
-        # print(n,d)
 
-        wavelengths = np.linspace(600, 2300, 1000) * 1e-9
+        # wavelengths = np.linspace(600, 2300, 1000) * 1e-9
         R = np.array([reflectivity_s(
             M,
             n,
@@ -107,16 +158,21 @@ class Test_reflectivity(TestCase):
             n_substrate,
             theta_outer
         )
-        for lam in wavelengths])
+            for lam in wavelengths])
 
-        fig, ax = plt.subplots()
-        # figsize=(12, 9), dpi=600
-        ax: plt.Axes
-        ax.plot(wavelengths * 1e9, R)
-        ax.set_xlabel(r'$\lambda_\mathrm{outer}$ [nm]')
-        ax.set_ylabel('R')
-        # ax.set_ylim(0, 1.2)
-        plt.show()
+        # diff = R_paper - R
+        # print(np.argmax(diff))
+
+        # Compare
+        np.testing.assert_allclose(R_paper, R, rtol=0, atol=0.0016)
+
+        # fig, ax = plt.subplots()
+        # ax: plt.Axes
+        # ax.plot(wavelengths, R_paper)
+        # ax.plot(wavelengths, R)
+        # ax.set_xlabel(r'$\lambda_\mathrm{outer}$ [nm]')
+        # ax.set_ylabel('R')
+        # plt.show()
 
     def test_against_plot_2_from_paper_for_dichroic(self):
         # Digitised reflectivity against wavelength plot from paper
@@ -150,7 +206,7 @@ class Test_reflectivity(TestCase):
             n_substrate,
             theta_outer
         )
-        for lam in wavelengths])
+            for lam in wavelengths])
 
         # fig, ax = plt.subplots()
         # # figsize=(12, 9), dpi=600
@@ -166,23 +222,22 @@ class Test_reflectivity(TestCase):
         # Compare
         np.testing.assert_allclose(R_paper, R, rtol=0, atol=0.1443)
 
-
-    def test_against_plot_1_from_paper_for_antireflection_coating(self):
-        df = pd.read_csv('./data/digitised_plots_from_Hobson_Baldwin_2004_paper/plot_1_data.csv')
-
-        wavelengths: np.ndarray = df.iloc[:,0].values * 1e-9
-        R_paper: np.ndarray = df.iloc[:,1].values
-
-        p = wavelengths.argsort()
-        wavelengths = wavelengths[p]
-        R_paper = R_paper[p]
-
-
-
-        # fig, ax = plt.subplots()
-        # ax: plt.Axes
-        # ax.plot(wavelengths, R)
-        # plt.show()
+    # def test_against_plot_1_from_paper_for_antireflection_coating(self):
+    #     df = pd.read_csv('./data/digitised_plots_from_Hobson_Baldwin_2004_paper/plot_1_data.csv')
+    #
+    #     wavelengths: np.ndarray = df.iloc[:,0].values * 1e-9
+    #     R_paper: np.ndarray = df.iloc[:,1].values
+    #
+    #     p = wavelengths.argsort()
+    #     wavelengths = wavelengths[p]
+    #     R_paper = R_paper[p]
+    #
+    #
+    #
+    #     # fig, ax = plt.subplots()
+    #     # ax: plt.Axes
+    #     # ax.plot(wavelengths, R)
+    #     # plt.show()
 
     # def test_against_plot_2_from_paper_for_dichroic(self):
     #     df = pd.read_csv('./data/digitised_plots_from_Hobson_Baldwin_2004_paper/plot_2_data.csv')

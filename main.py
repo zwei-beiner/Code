@@ -15,7 +15,8 @@ def _make_matrix(M: np.int_, n: np.ndarray, d: np.ndarray, k_outer: np.float_, n
     assert len(n) == M and len(d) == M
 
     def calc_k_x(n):
-        return k_outer * np.sqrt((n / n_outer) ** 2 - np.sin(theta_outer) ** 2)
+        # Use np.emath.sqrt (instead of np.sqrt) to return complex numbers if argument of sqrt is negative
+        return k_outer * np.emath.sqrt((n / n_outer) ** 2 - np.sin(theta_outer) ** 2)
 
     k_x_outer: np.ndarray = k_outer * np.cos(theta_outer)
     k_x: np.ndarray = calc_k_x(n)
@@ -26,7 +27,6 @@ def _make_matrix(M: np.int_, n: np.ndarray, d: np.ndarray, k_outer: np.float_, n
         np.array([[-np.exp(1j * phi[j - 1]), -1], [-np.exp(1j * phi[j - 1]) * k_x[j - 1], k_x[j - 1]]])
         for j in range(1, M + 1)
     ]
-
     betas: list[np.ndarray] = [
         np.array([[1, np.exp(1j * phi[0])],[k_x[0] / k_x_outer, -k_x[0] / k_x_outer * np.exp(1j * phi[0])]])
     ] + [
