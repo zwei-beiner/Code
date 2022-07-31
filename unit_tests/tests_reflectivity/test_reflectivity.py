@@ -10,15 +10,17 @@ from main import reflectivity_s, _make_matrix
 
 class Test_reflectivity(TestCase):
 
+
     def test_make_matrix(self):
         def make_test_matrix_for_fabry_pelot_etalon(n: np.float_, d: np.float_, k_outer: np.float_,
                                                     n_outer: np.float_, n_substrate: np.float_,
                                                     theta_outer: np.float_) -> np.ndarray:
-            k_x_outer: np.complex_ = k_outer * np.cos(theta_outer)
-            k_x_layer: np.complex_ = k_outer * np.sqrt(complex((n / n_outer) ** 2 - np.sin(theta_outer) ** 2))
-            k_x_substrate: np.complex_ = k_outer * np.emath.sqrt(complex((n_substrate / n_outer) ** 2 - np.sin(theta_outer) ** 2))
+            k_x_outer: np.complex_ = np.complex_(k_outer * np.cos(theta_outer))
+            k_x_layer: np.complex_ = np.complex_(k_outer * np.emath.sqrt((n / n_outer) ** 2 - np.sin(theta_outer) ** 2))
+            # return np.array([(n / n_outer) ** 2])
+            k_x_substrate: np.complex_ = k_outer * np.emath.sqrt(np.complex_((n_substrate / n_outer) ** 2 - np.sin(theta_outer) ** 2))
 
-            phi_0: np.complex_ = k_x_layer * d
+            phi_0: np.complex_ = k_x_layer * np.complex_(d)
 
             # mat = np.array([
             #     [-1, 1, np.exp(1j * phi_0), 0],
@@ -27,12 +29,12 @@ class Test_reflectivity(TestCase):
             #     [0, -np.exp(1j * phi_0) * k_x_layer, k_x_layer, k_x_substrate]
             # ])
             mat = np.array([
-                [0,0,np.exp(1j * phi_0),0],
-                [0,1,-k_x_layer / k_x_outer * np.exp(1j * phi_0), 1],
-                [-1,k_x_layer / k_x_outer,-1, k_x_substrate],
-                [1,-np.exp(1j * phi_0),k_x_layer, 0],
-                [0,-np.exp(1j * phi_0) * k_x_layer,0, 0]
-            ])
+                [0,     0,                                  np.exp(1j * phi_0),                             0],
+                [0,     1,                                  -k_x_layer / k_x_outer * np.exp(1j * phi_0),    1],
+                [-1,    k_x_layer / k_x_outer,              -1,                                             k_x_substrate],
+                [1,     -np.exp(1j * phi_0),                k_x_layer,                                      0],
+                [0,     -np.exp(1j * phi_0) * k_x_layer,    0,                                              0]
+            ], dtype=np.complex_)
             return mat
 
         for n in np.linspace(0.1, 10, num=10):
@@ -51,9 +53,16 @@ class Test_reflectivity(TestCase):
                                     M, np.array([n]), np.array([d]), 2 * np.pi / wavelength, n_outer, n_substrate, theta
                                 )
 
+                                err_msg: str = f'n: {n}, d: {d}, wavelength: {wavelength}, n_outer: {n_outer}, ' \
+                                               f'n_substrate: {n_substrate}, theta: {theta}' + \
+                                               '\nR_correct:'+str(R_correct.tolist())+\
+                                               '\n R_to_be_tested:'+str(R_to_be_tested.tolist())
                                 np.testing.assert_allclose(
                                     R_correct, R_to_be_tested, rtol=0, atol=3e-5,
-                                    err_msg='R_correct:'+str(R_correct.tolist())+'\n R_to_be_tested:'+str(R_to_be_tested.tolist()))
+                                    err_msg=err_msg)
+                                # np.testing.assert_allclose(
+                                #     R_correct, R_to_be_tested, rtol=0, atol=1e-15,
+                                #     err_msg=err_msg)
 
     def test_fabry_pelot_etalon(self):
         M: int = 1
@@ -107,6 +116,9 @@ class Test_reflectivity(TestCase):
         R_to_be_tested = np.array(
             [reflectivity_s(M, n, d, lam, n_outer, n_substrate, theta_outer) for lam in wavelengths])
 
+        self.assertEqual(R_correct.shape[0], R_to_be_tested.shape[0])
+        np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=1e-15)
+
         # fig: plt.Figure
         # ax: plt.Axes
         # fig, ax = plt.subplots()
@@ -116,8 +128,6 @@ class Test_reflectivity(TestCase):
         # # ax.set_ylim(0,1.1)
         # fig.show()
 
-        self.assertEqual(R_correct.shape[0], R_to_be_tested.shape[0])
-        np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=1e-15)
         # for correct, to_test in zip(R_correct, R_to_be_tested):
         #     self.assertAlmostEqual(correct, to_test, places=15)
         # theta = np.linspace(0,0.06,num=1000)
