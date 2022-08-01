@@ -72,6 +72,17 @@ class Test_reflectivity(TestCase):
         # t_12: np.complex_ = 2 * k_x_1 / (k_x_1 + k_x_2)
 
         def calculate_reflectivity_using_analytic_formulas(wavelength: np.float_, d: np.float_, n_outer: np.float_, n_layer: np.float_, n_substrate: np.float_, theta_outer: np.float_):
+            """
+
+            @param wavelength: wavelength in the outer medium. Hence wavelength in vacuum is "wavelength/n_outer"
+            @param d:
+            @param n_outer:
+            @param n_layer:
+            @param n_substrate:
+            @param theta_outer:
+            @return:
+            """
+
             # Angles in layer and substrate
             def calc_cos_theta_i(n_i):
                 # Snell's law
@@ -102,8 +113,10 @@ class Test_reflectivity(TestCase):
 
             # def reflection_coefficient(r, lambda_0, n, d, cos_theta):
             r = r_12
-            phi = 2 * np.pi / wavelength * n_layer * d * cos_theta_layer
-            return 4 * (r ** 2) * (np.sin(phi) ** 2) / ((1 - r ** 2) ** 2 + 4 * (r ** 2) * (np.sin(phi) ** 2))
+            phi = 2 * np.pi / wavelength * n_layer * d * cos_theta_layer / n_outer
+            amplitude = r * (1-np.exp(-2 * 1j * phi)) / (1 - r ** 2 * np.exp(-2 * 1j * phi))
+            return np.abs(amplitude) ** 2
+            # return 4 * (r ** 2) * (np.sin(phi) ** 2) / ((1 - r ** 2) ** 2 + 4 * (r ** 2) * (phi ** 2))
 
         M: int = 1
         # d: np.float_ = np.float_(1 * 1e-3)
@@ -115,7 +128,7 @@ class Test_reflectivity(TestCase):
 
         for wavelength in np.linspace(200, 3000, num=10) * 1e-9:
             for d in np.linspace(1, 1e3, num=10) * 1e-9:
-                for theta_outer in np.linspace(0, np.pi/2 - 1e-6, num=10):
+                for theta_outer in np.linspace(-np.pi/2 + 1e-6, np.pi/2 - 1e-6, num=20):
                     for n_outer in np.linspace(0.1, 10, num=10):
                         for n_layer in np.linspace(0.1, 10, num=10):
                             # for n_substrate in np.linspace(0.1, 10, num=10):
@@ -125,7 +138,7 @@ class Test_reflectivity(TestCase):
                             R_to_be_tested = reflectivity_s(M, np.array([n_layer]), np.array([d]), wavelength, n_outer, n_substrate, theta_outer)
                             err_msg = f'wavelength: {wavelength}, d: {d}, theta_outer: {theta_outer}, n_outer: {n_outer}, n_layer: {n_layer}, total_internal_reflection: {total_internal_reflection}, ' + \
                                 f'R_correct: {R_correct}, R_to_be_tested: {R_to_be_tested}'
-                            self.assertAlmostEqual(R_correct, R_to_be_tested, delta=3e-05, msg=err_msg)
+                            self.assertAlmostEqual(R_correct, R_to_be_tested, delta=1e-9, msg=err_msg)
             # np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=1e-15)
 
         # fig: plt.Figure
