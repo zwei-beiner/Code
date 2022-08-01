@@ -24,7 +24,7 @@ class Test_reflectivity(TestCase):
 
             # mat = np.array([
             #     [-1, 1, np.exp(1j * phi_0), 0],
-            #     [1, k_x_layer / k_x_outer, -k_x_layer / k_x_outer, 0],
+            #     [1, k_x_layer / k_x_outer, -k_x_layer / k_x_outer * np.exp(1j * phi_0), 0],
             #     [0, -np.exp(1j * phi_0), -1, 1],
             #     [0, -np.exp(1j * phi_0) * k_x_layer, k_x_layer, k_x_substrate]
             # ])
@@ -65,59 +65,68 @@ class Test_reflectivity(TestCase):
                                 #     err_msg=err_msg)
 
     def test_fabry_pelot_etalon(self):
-        M: int = 1
-        d: np.ndarray = np.array([1]) * 1e-3
-        n_outer = 1.00
-        n_layer = 1.50
-        n: np.ndarray = np.array([n_layer])
-        n_substrate = n_outer
-        theta_outer = 0.
-
         # Fresnel coefficients
         # def calc_k_x(n):
         #     return k_outer * np.sqrt((n / n_outer) ** 2 - np.sin(theta_outer) ** 2)
         # r_12: np.complex_ = (k_x_1 - k_x_2) / (k_x_1 + k_x_2)
         # t_12: np.complex_ = 2 * k_x_1 / (k_x_1 + k_x_2)
 
-        # Angles in layer and substrate
-        def calc_cos_theta_i(n_i):
-            # Snell's law
-            sin_theta_i = n_outer * np.sin(theta_outer) / n_i
-            # Note: Cosine can be complex
-            cos_theta_i = np.sqrt(1 - sin_theta_i ** 2)
-            return cos_theta_i
+        def calculate_reflectivity_using_analytic_formulas(wavelength: np.float_, d: np.float_, n_outer: np.float_, n_layer: np.float_, n_substrate: np.float_, theta_outer: np.float_):
+            # Angles in layer and substrate
+            def calc_cos_theta_i(n_i):
+                # Snell's law
+                sin_theta_i = n_outer * np.sin(theta_outer) / n_i
+                # Note: Cosine can be complex
+                cos_theta_i = np.emath.sqrt(1 - sin_theta_i ** 2)
+                return cos_theta_i
 
-        cos_theta_outer = np.cos(theta_outer)
-        cos_theta_layer = calc_cos_theta_i(n_layer)
-        cos_theta_substrate = calc_cos_theta_i(n_substrate)
+            cos_theta_outer = np.cos(theta_outer)
+            cos_theta_layer = calc_cos_theta_i(n_layer)
+            cos_theta_substrate = calc_cos_theta_i(n_substrate)
 
-        # Fresnel coefficents for s polarisation (TE polarisation)
-        def r_ij(n_i, cos_theta_i, n_j, cos_theta_j):
-            return (n_i * cos_theta_i - n_j * cos_theta_j) / (n_i * cos_theta_i + n_j * cos_theta_j)
+            # Fresnel coefficents for s polarisation (TE polarisation)
+            def r_ij(n_i, cos_theta_i, n_j, cos_theta_j):
+                return (n_i * cos_theta_i - n_j * cos_theta_j) / (n_i * cos_theta_i + n_j * cos_theta_j)
 
-        def t_ij(n_i, cos_theta_i, n_j, cos_theta_j):
-            return 2 * n_i * cos_theta_i / (n_i * cos_theta_i + n_j * cos_theta_j)
+            def t_ij(n_i, cos_theta_i, n_j, cos_theta_j):
+                return 2 * n_i * cos_theta_i / (n_i * cos_theta_i + n_j * cos_theta_j)
 
-        r_12: np.complex_ = r_ij(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
-        t_12: np.complex_ = t_ij(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
+            r_12: np.complex_ = r_ij(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
+            t_12: np.complex_ = t_ij(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
 
-        r_23: np.complex_ = r_ij(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
-        t_23: np.complex_ = t_ij(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
+            r_23: np.complex_ = r_ij(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
+            t_23: np.complex_ = t_ij(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
 
-        self.assertAlmostEqual(r_12.real, -r_23.real, places=15)
-        self.assertAlmostEqual(r_12.imag, -r_23.imag, places=15)
+            self.assertAlmostEqual(r_12.real, -r_23.real, delta=1e-4)
+            self.assertAlmostEqual(r_12.imag, -r_23.imag, delta=1e-4)
 
-        def reflection_coefficient(r, lambda_0, n, d, cos_theta):
-            phi = 2 * np.pi / lambda_0 * n * d * cos_theta
+            # def reflection_coefficient(r, lambda_0, n, d, cos_theta):
+            r = r_12
+            phi = 2 * np.pi / wavelength * n_layer * d * cos_theta_layer
             return 4 * (r ** 2) * (np.sin(phi) ** 2) / ((1 - r ** 2) ** 2 + 4 * (r ** 2) * (np.sin(phi) ** 2))
 
-        wavelengths = np.linspace(1, 10, num=10000) * 1e-6
-        R_correct = np.array([reflection_coefficient(r_12, lam, n_layer, d[0], cos_theta_layer) for lam in wavelengths])
-        R_to_be_tested = np.array(
-            [reflectivity_s(M, n, d, lam, n_outer, n_substrate, theta_outer) for lam in wavelengths])
+        M: int = 1
+        # d: np.float_ = np.float_(1 * 1e-3)
+        # n_outer: np.float_ = np.float_(1.00)
+        # n_layer: np.float_ = np.float_(1.50)
+        # n: np.ndarray = np.array([n_layer])
+        # n_substrate = n_outer
+        # theta_outer: np.float_ = np.float_(0.)
 
-        self.assertEqual(R_correct.shape[0], R_to_be_tested.shape[0])
-        np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=1e-15)
+        for wavelength in np.linspace(200, 3000, num=10) * 1e-9:
+            for d in np.linspace(1, 1e3, num=10) * 1e-9:
+                for theta_outer in np.linspace(0, np.pi/2 - 1e-6, num=10):
+                    for n_outer in np.linspace(0.1, 10, num=10):
+                        for n_layer in np.linspace(0.1, 10, num=10):
+                            # for n_substrate in np.linspace(0.1, 10, num=10):
+                            total_internal_reflection: bool = 1. < n_outer / n_layer * np.sin(np.abs(theta_outer))
+                            n_substrate = n_outer
+                            R_correct = calculate_reflectivity_using_analytic_formulas(wavelength, d, n_outer, n_layer, n_substrate, theta_outer)
+                            R_to_be_tested = reflectivity_s(M, np.array([n_layer]), np.array([d]), wavelength, n_outer, n_substrate, theta_outer)
+                            err_msg = f'wavelength: {wavelength}, d: {d}, theta_outer: {theta_outer}, n_outer: {n_outer}, n_layer: {n_layer}, total_internal_reflection: {total_internal_reflection}, ' + \
+                                f'R_correct: {R_correct}, R_to_be_tested: {R_to_be_tested}'
+                            self.assertAlmostEqual(R_correct, R_to_be_tested, delta=3e-05, msg=err_msg)
+            # np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=1e-15)
 
         # fig: plt.Figure
         # ax: plt.Axes
