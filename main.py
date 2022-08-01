@@ -16,6 +16,19 @@ def reflectivity_s(M: np.int_, n: np.ndarray, d: np.ndarray, wavelength: np.floa
 
 def _make_matrix(M: np.int_, n: npt.NDArray[np.float_], d: npt.NDArray[np.float_], k_outer: np.float_, n_outer: np.float_, n_substrate: np.float_,
                  theta_outer: np.float_) -> npt.NDArray[np.complex_]:
+    """
+    Constructs the matrix \mathbf{M}.
+
+    @param M: Number of layers. Valid input range: M ≥ 1
+    @param n: Array storing the refractive indices of the layers.
+    @param d: Array storing the thicknesses of the layers.
+    @param k_outer: Wavenumber "2*pi/lambda" of the incident light in the outer medium. lambda is wavelength in the
+    outer medium
+    @param n_outer: Refractive index of the outer medium.
+    @param n_substrate: Refractive index of the substrate.
+    @param theta_outer: Angle in the outer medium, i.e. incident angle. Valid range: -pi/2 < theta_outer < pi/2
+    @return: Matrix \mathbf{M}
+    """
     # assert len(n) == M and len(d) == M
 
     def calc_k_x(n: Union[np.float_, npt.NDArray[np.float_]]) -> Union[np.complex_, npt.NDArray[np.complex_]]:
@@ -61,6 +74,12 @@ def _make_matrix(M: np.int_, n: npt.NDArray[np.float_], d: npt.NDArray[np.float_
     return mat
 
 def _make_vector(M: np.int_) -> npt.NDArray[np.complex_]:
+    """
+    Constructs the vector \mathbf{c}.
+    @param M: Number of layers
+    @return: Vector \mathbf{c}
+    """
+
     c: np.ndarray = np.zeros(2 * M + 2, dtype=np.complex_)
     c[0] = 1
     c[1] = 1

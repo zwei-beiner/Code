@@ -9,9 +9,27 @@ from main import reflectivity_s, _make_matrix
 
 
 class Test_reflectivity(TestCase):
-
+    # Note: Can't handle zero layers (M=0)
+    # def test_fresnel_equations(self):
+    #     def fresnel_reflection_coefficient_for_s_pol(n_1: np.float_, n_2: np.float_, theta_incident: np.float_):
+    #         return np.abs((n_1 * np.cos(theta_incident) - n_2 * np.emath.sqrt(1 - (n_1 * np.sin(theta_incident) / n_2) ** 2))
+    #                       / (n_1 * np.cos(theta_incident) + n_2 * np.emath.sqrt(1 - (n_1 * np.sin(theta_incident) / n_2) ** 2))) ** 2
+    #
+    #     M = 0
+    #     for n_1 in np.linspace(0.1, 10, num=10):
+    #         for n_2  in np.linspace(0.1, 10, num=10):
+    #             for theta_incident in np.linspace(-np.pi/2 + 1e-6, np.pi - 1e-6, num=10):
+    #                 self.assertAlmostEqual(
+    #                     fresnel_reflection_coefficient_for_s_pol(n_1, n_2, theta_incident),
+    #                     reflectivity_s(M, np.array([0]), np.array([0]), np.float_(500e-9), n_1, n_2, theta_incident),
+    #                     delta=1e-15
+    #                 )
 
     def test_make_matrix(self):
+        """
+        Tests if matrix is constructed correctly for a single layer (which is a Fabry-Perot interferometer).
+        """
+
         def make_test_matrix_for_fabry_pelot_etalon(n: np.float_, d: np.float_, k_outer: np.float_,
                                                     n_outer: np.float_, n_substrate: np.float_,
                                                     theta_outer: np.float_) -> np.ndarray:
