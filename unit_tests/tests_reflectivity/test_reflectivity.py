@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from main import reflectivity_s, _make_matrix
+from main import reflectivity, _make_matrix
 
 
 class Test_reflectivity(TestCase):
@@ -68,7 +68,7 @@ class Test_reflectivity(TestCase):
 
                                 M = 1
                                 R_to_be_tested: np.ndarray = _make_matrix(
-                                    M, np.array([n]), np.array([d]), 2 * np.pi / wavelength, n_outer, n_substrate, theta
+                                    0, M, np.array([n]), np.array([d]), 2 * np.pi / wavelength, n_outer, n_substrate, theta
                                 )
 
                                 err_msg: str = f'n: {n}, d: {d}, wavelength: {wavelength}, n_outer: {n_outer}, ' \
@@ -153,7 +153,7 @@ class Test_reflectivity(TestCase):
                             total_internal_reflection: bool = 1. < n_outer / n_layer * np.sin(np.abs(theta_outer))
                             n_substrate = n_outer
                             R_correct = calculate_reflectivity_using_analytic_formulas(wavelength, d, n_outer, n_layer, n_substrate, theta_outer)
-                            R_to_be_tested = reflectivity_s(M, np.array([n_layer]), np.array([d]), wavelength, n_outer, n_substrate, theta_outer)
+                            R_to_be_tested = reflectivity(0, M, np.array([n_layer]), np.array([d]), wavelength, n_outer, n_substrate, theta_outer)
                             err_msg = f'wavelength: {wavelength}, d: {d}, theta_outer: {theta_outer}, n_outer: {n_outer}, n_layer: {n_layer}, total_internal_reflection: {total_internal_reflection}, ' + \
                                 f'R_correct: {R_correct}, R_to_be_tested: {R_to_be_tested}'
                             self.assertAlmostEqual(R_correct, R_to_be_tested, delta=1e-9, msg=err_msg)
@@ -199,7 +199,8 @@ class Test_reflectivity(TestCase):
         theta_outer = 0.
 
         # wavelengths = np.linspace(600, 2300, 1000) * 1e-9
-        R = np.array([reflectivity_s(
+        R = np.array([reflectivity(
+            0,
             M,
             n,
             d,
@@ -247,7 +248,8 @@ class Test_reflectivity(TestCase):
         theta_outer = 0.
 
         # wavelengths = np.linspace(600, 2300, 1000) * 1e-9
-        R = np.array([reflectivity_s(
+        R = np.array([reflectivity(
+            0,
             M,
             n,
             d,
