@@ -75,12 +75,11 @@ class Test_reflectivity(TestCase):
             """
 
             @param wavelength: wavelength in the outer medium. Hence wavelength in vacuum is "wavelength/n_outer"
-            @param d:
-            @param n_outer:
-            @param n_layer:
-            @param n_substrate:
-            @param theta_outer:
-            @return:
+            @param d: thickness of the layer in meters
+            @param n_outer: refractive index of the outer medium
+            @param n_layer: refractive index of the inner medium
+            @param n_substrate: refractive index of the outer medium. Must be the same as the n_outer
+            @param theta_outer: angle of incidence, i.e. angle to the normal in the outer medium. Can be in the range -pi/2<theta_outer<pi/2
             """
 
             # Angles in layer and substrate
@@ -108,8 +107,9 @@ class Test_reflectivity(TestCase):
             r_23: np.complex_ = r_ij(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
             t_23: np.complex_ = t_ij(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
 
-            self.assertAlmostEqual(r_12.real, -r_23.real, delta=1e-4)
-            self.assertAlmostEqual(r_12.imag, -r_23.imag, delta=1e-4)
+            self.assertEqual(n_outer, n_substrate)
+            self.assertAlmostEqual(r_12.real, -r_23.real, delta=1e-4, msg='Refractive index of the outer medium and the substrate must be the same.')
+            self.assertAlmostEqual(r_12.imag, -r_23.imag, delta=1e-4, msg='Refractive index of the outer medium and the substrate must be the same.')
 
             # def reflection_coefficient(r, lambda_0, n, d, cos_theta):
             r = r_12

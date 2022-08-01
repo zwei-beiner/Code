@@ -1,0 +1,138 @@
+\documentclass[]{article}
+
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{amsfonts}
+%\usepackage{physics}
+\usepackage{bm}
+
+\usepackage[dvipsnames]{xcolor}
+\usepackage{pgfplots} %import after xcolor!!!
+\usepackage{geometry}
+\geometry{
+	a4paper,
+	total={170mm,257mm},
+	left=20mm,
+	top=15mm,
+	bottom=15mm
+}
+
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage{subcaption}
+\usepackage{graphicx}
+\graphicspath{ {./Figures/} }
+
+
+\title{Theoretical Background}
+\author{Namu Kroupa}
+\date{\today}
+
+\begin{document}
+	\maketitle
+	
+	\section{Matrix equation}
+	To calculate the reflectivity, $R=|b_0|^2$, the matrix equation 
+	\begin{equation}
+		\mathbf{M}\mathbf{x}=\mathbf{c}
+	\end{equation}
+	must be solved for $\mathbf{x}$, where
+	\begin{equation}\label{eqn:matrix-equation}
+		\mathbf{x}=(b_0,a_1,b_1,a_2,b_2,\dots,a_M,b_M,a_{M+1})^T
+	\end{equation}
+	and
+	\begin{equation}
+		\mathbf{c}=(1,1,0,0,\dots,0)^T
+	\end{equation}
+	are $(2M+2)$-dimensional complex vectors.
+	
+	The matrix $\mathbf{M}\in\mathbb{C}^{(2M+2)\times(2M+2)}$ is 
+	\begin{equation}
+		\mathbf{M}=
+		\begin{pmatrix}
+			\begin{matrix}a\\b\end{matrix}&\bm{\beta}_0&\bm{0}&\mathbf{0}&\mathbf{0}&\cdots&\mathbf{0}&\begin{matrix}0\\0\end{matrix}\\
+			\hline
+			\begin{matrix}0\\0\end{matrix}&\bm{\alpha}_1&\bm{\beta}_1&\mathbf{0}&\mathbf{0}&\cdots&\mathbf{0}&\begin{matrix}0\\0\end{matrix}\\
+			\hline 
+			\begin{matrix}0\\0\end{matrix}&\mathbf{0}&\bm{\alpha}_2&\bm{\beta}_2&\mathbf{0}&\cdots&\mathbf{0}&\begin{matrix}0\\0\end{matrix}\\
+			\hline
+			\begin{matrix}0\\0\end{matrix}&\mathbf{0}&\mathbf{0}&\bm{\alpha}_3&\bm{\beta}_3&\cdots&\mathbf{0}&\begin{matrix}0\\0\end{matrix}\\
+			\hline
+			\vdots&\vdots&\vdots&\vdots&\vdots&\ddots&\bm{\beta}_{N-1}&\begin{matrix}0\\0\end{matrix}\\
+			\hline
+			\begin{matrix}0\\0\end{matrix}&\mathbf{0}&\mathbf{0}&\mathbf{0}&\mathbf{0}&\cdots&\bm{\alpha}_{N}&\begin{matrix}c\\d\end{matrix}
+		\end{pmatrix},
+	\end{equation}
+	(the horizontal lines are for readability) where 
+	\begin{equation}
+		\mathbf{0}=\begin{pmatrix}0&0\\0&0\end{pmatrix}.
+	\end{equation}
+
+	To solve \ref{eqn:matrix-equation} efficiently, its ``band-storage form'' $\mathbf{M}_\text{band}\in \mathbb{C}^{5\times(2M+2)}$ is used:
+	\begin{equation}
+		\mathbf{M}_\text{band}=
+		\begin{pmatrix}
+			\begin{matrix}0\\0\\a\\b\\0\end{matrix}&\bm{c}_0&\bm{c}_1&\cdots&\bm{c}_{M-1}&\begin{matrix}0\\c\\d\\0\\0\end{matrix}
+		\end{pmatrix}
+	\end{equation}
+	where
+	\begin{equation}
+		\bm{c}_i=
+		\begin{pmatrix}
+			0&(\bm{\beta}_i)_{01}\\
+			(\bm{\beta}_i)_{00}&(\bm{\beta}_i)_{11}\\
+			(\bm{\beta}_i)_{10}&(\bm{\alpha}_{i+1})_{01}\\
+			(\bm{\alpha}_{i+1})_{00}&(\bm{\alpha}_{i+1})_{11}\\
+			(\bm{\alpha}_{i+1})_{10}&0
+		\end{pmatrix}\quad\quad\text{for}\quad i=0,\dots,M-1
+	\end{equation}
+
+	For s-polarisation,
+	\begin{align}
+		a&=-1\\
+		b&=1\\
+		c&=1\\
+		d&=(k_x)_\text{substrate}
+	\end{align}
+	\begin{equation}
+		\bm{\alpha}_j=
+		\begin{pmatrix}
+			-e^{i\phi_{j-1}}&-1\\
+			-e^{i\phi_{j-1}}(k_x)_{j-1}&(k_x)_{j-1}
+		\end{pmatrix}\quad\quad\text{for}\quad j=1,\dots,N
+	\end{equation}
+	\begin{equation}
+		\bm{\beta}_j=
+		\begin{dcases}
+			\begin{pmatrix}
+				1&e^{i\phi_0}\\
+				\frac{(k_x)_0}{(k_x)_\text{outer}}&-\frac{(k_x)_0}{(k_x)_\text{outer}}e^{i\phi_0}
+			\end{pmatrix}&\text{for}\quad j=0\\
+			\begin{pmatrix}
+				1&e^{i\phi_j}\\
+				(k_x)_j&-(k_x)_je^{i\phi_j}
+			\end{pmatrix}&\text{for}\quad j=1,\dots,N-1
+		\end{dcases}.
+	\end{equation}
+	
+	\section{Fabry-Perot interferometer}
+	As a test case, the Fabry-Perot interferometer is considered, which consists of a single layer of refractive index $n_\text{layer}$ and thickness $d$ in a medium of refractive index $n_\text{outer}$ and whose reflectivity at a wavelength $\lambda_\text{vac}$ (in vacuum) and incident angle $\theta_\text{outer}$ is given by
+	\begin{equation}
+		R=\left|\frac{r(1-e^{2i\phi_0})}{1-r^2 e^{2i\phi_0}}\right|^2
+	\end{equation}
+	where 
+	\begin{align}
+		\phi_0&=\frac{2\pi}{\lambda_\text{vac}}n_\text{layer}d\cos\theta_\text{layer}\\
+		r&=\frac{n_\text{outer}\cos\theta_\text{outer}-n_\text{layer}\cos\theta_\text{layer}}{n_\text{outer}\cos\theta_\text{outer}+n_\text{layer}\cos\theta_\text{layer}}.
+	\end{align}
+	The angle $\theta_\text{layer}$ is the angle of the light ray inside the layer. Its cosine is given by
+	\begin{equation}
+		\cos\theta_\text{layer}=\sqrt{1-\left(\frac{n_\text{outer}\sin\theta_\text{outer}}{n_\text{layer}}\right)^2}.
+	\end{equation}
+	In the case of total internal refraction, $\cos\theta_\text{layer}$ becomes imaginary and the above equations for $R$, $\phi_0$ and $r$ continue to hold.
+	
+%	\bibliographystyle{plain}
+%	\bibliography{refs}
+	
+\end{document}
