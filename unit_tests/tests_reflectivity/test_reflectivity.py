@@ -108,7 +108,7 @@ class Test_reflectivity(TestCase):
         def calculate_reflectivity_using_analytic_formulas(wavelength: np.float_, d: np.float_, n_outer: np.float_, n_layer: np.float_, n_substrate: np.float_, theta_outer: np.float_):
             """
 
-            @param wavelength: wavelength in the outer medium. Hence wavelength in vacuum is "wavelength/n_outer"
+            @param wavelength: wavelength in the outer medium. Hence, wavelength in vacuum is "wavelength/n_outer"
             @param d: thickness of the layer in meters
             @param n_outer: refractive index of the outer medium
             @param n_layer: refractive index of the inner medium
