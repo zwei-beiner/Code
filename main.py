@@ -103,7 +103,7 @@ def _make_p_pol_submatrices(M: np.int_, phi: npt.NDArray[np.complex_], k_x: npt.
     d: np.complex_ = np.complex_(n_substrate)
 
     alphas: list[npt.NDArray[np.complex_]] = [
-        np.array([[-np.exp(1j * phi[j-1]) * k_x[j-1] / n[j-1], -k_x[j-1] /  n[j-1]], [-np.exp(1j * phi[j-1] * n[j-1]),n[j-1]]], dtype=np.complex_)
+        np.array([[-np.exp(1j * phi[j-1]) * k_x[j-1] / n[j-1], -k_x[j-1] /  n[j-1]], [-np.exp(1j * phi[j-1]) * n[j-1],n[j-1]]], dtype=np.complex_)
         for j in range(1, M + 1)
     ]
 

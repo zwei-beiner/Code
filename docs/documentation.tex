@@ -59,9 +59,9 @@
 			\hline
 			\begin{matrix}0\\0\end{matrix}&\mathbf{0}&\mathbf{0}&\bm{\alpha}_3&\bm{\beta}_3&\cdots&\mathbf{0}&\begin{matrix}0\\0\end{matrix}\\
 			\hline
-			\vdots&\vdots&\vdots&\vdots&\vdots&\ddots&\bm{\beta}_{N-1}&\begin{matrix}0\\0\end{matrix}\\
+			\vdots&\vdots&\vdots&\vdots&\vdots&\ddots&\bm{\beta}_{M-1}&\begin{matrix}0\\0\end{matrix}\\
 			\hline
-			\begin{matrix}0\\0\end{matrix}&\mathbf{0}&\mathbf{0}&\mathbf{0}&\mathbf{0}&\cdots&\bm{\alpha}_{N}&\begin{matrix}c\\d\end{matrix}
+			\begin{matrix}0\\0\end{matrix}&\mathbf{0}&\mathbf{0}&\mathbf{0}&\mathbf{0}&\cdots&\bm{\alpha}_{M}&\begin{matrix}c\\d\end{matrix}
 		\end{pmatrix},
 	\end{equation}
 	(the horizontal lines are for readability) where 
@@ -144,7 +144,11 @@
 	where 
 	\begin{align}
 		\phi_0&=\frac{2\pi}{\lambda_\text{vac}}n_\text{layer}d\cos\theta_\text{layer}\\
-		r&=\frac{n_\text{outer}\cos\theta_\text{outer}-n_\text{layer}\cos\theta_\text{layer}}{n_\text{outer}\cos\theta_\text{outer}+n_\text{layer}\cos\theta_\text{layer}}.
+		r&=
+		\begin{dcases}
+		\frac{n_\text{outer}\cos\theta_\text{outer}-n_\text{layer}\cos\theta_\text{layer}}{n_\text{outer}\cos\theta_\text{outer}+n_\text{layer}\cos\theta_\text{layer}}&\text{for s-polarisation},\\
+		\frac{n_\text{layer}\cos\theta_\text{outer}-n_\text{outer}\cos\theta_\text{layer}}{n_\text{layer}\cos\theta_\text{outer}+n_\text{outer}\cos\theta_\text{layer}}&\text{for p-polarisation}
+		\end{dcases}.
 	\end{align}
 	The angle $\theta_\text{layer}$ is the angle of the light ray inside the layer. Its cosine is given by
 	\begin{equation}

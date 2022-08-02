@@ -2,6 +2,7 @@ from pathlib import Path
 from unittest import TestCase
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -32,7 +33,7 @@ class Test_reflectivity(TestCase):
 
         def make_test_matrix_for_fabry_pelot_etalon(n: np.float_, d: np.float_, k_outer: np.float_,
                                                     n_outer: np.float_, n_substrate: np.float_,
-                                                    theta_outer: np.float_) -> np.ndarray:
+                                                    theta_outer: np.float_) -> tuple[npt.NDArray[np.complex_], npt.NDArray[np.complex_]]:
             k_x_outer: np.complex_ = np.complex_(k_outer * np.cos(theta_outer))
             k_x_layer: np.complex_ = np.complex_(k_outer * np.emath.sqrt((n / n_outer) ** 2 - np.sin(theta_outer) ** 2))
             # return np.array([(n / n_outer) ** 2])
@@ -46,41 +47,56 @@ class Test_reflectivity(TestCase):
             #     [0, -np.exp(1j * phi_0), -1, 1],
             #     [0, -np.exp(1j * phi_0) * k_x_layer, k_x_layer, k_x_substrate]
             # ])
-            mat = np.array([
+
+            # Matrix for s polarisation
+            mat_s: npt.NDArray[np.complex_] = np.array([
                 [0,     0,                                  np.exp(1j * phi_0),                             0],
                 [0,     1,                                  -k_x_layer / k_x_outer * np.exp(1j * phi_0),    1],
                 [-1,    k_x_layer / k_x_outer,              -1,                                             k_x_substrate],
                 [1,     -np.exp(1j * phi_0),                k_x_layer,                                      0],
                 [0,     -np.exp(1j * phi_0) * k_x_layer,    0,                                              0]
             ], dtype=np.complex_)
-            return mat
 
-        for n in np.linspace(0.1, 10, num=10):
-            print(n)
-            for d in np.linspace(1, 1e3, num=10) * 1e-9:
-                for wavelength in np.linspace(200, 3000, num=10) * 1e-9:
-                    for n_outer in np.linspace(0.1, 10, num=10):
-                        for n_substrate in np.linspace(0.1, 10, num=10):
-                            for theta in np.linspace(0, np.pi / 2 - 1e-3, num=10):
-                                R_correct: np.ndarray = make_test_matrix_for_fabry_pelot_etalon(
+            # Matrix for p polarisation
+            mat_p: npt.NDArray[np.complex_] = np.array([
+                [0,     0,                                      np.exp(1j * phi_0) * k_x_layer / n * n_outer / k_x_outer,   0],
+                [0,     k_x_layer / n * n_outer / k_x_outer,    -np.exp(1j * phi_0) * n / n_outer,                          k_x_substrate / n_substrate],
+                [-1,    n / n_outer,                            -k_x_layer / n,                                             n_substrate],
+                [1,     -np.exp(1j * phi_0) * k_x_layer / n,    n,                                                          0],
+                [0,     -np.exp(1j * phi_0) * n,                0,                                                          0]
+            ])
+
+            return mat_s, mat_p
+
+        num = 7
+        for n in np.linspace(0.1, 10, num=num):
+            for d in np.linspace(1, 1e3, num=num) * 1e-9:
+                for wavelength in np.linspace(200, 3000, num=num) * 1e-9:
+                    print(f'Testing: n = {n}, wavelength = {wavelength}')
+                    for n_outer in np.linspace(0.1, 10, num=num):
+                        for n_substrate in np.linspace(0.1, 10, num=num):
+                            for theta in np.linspace(0, np.pi / 2 - 1e-3, num=num):
+                                R_s_correct: npt.NDArray[np.complex_]
+                                R_p_correct: npt.NDArray[np.complex_]
+                                R_s_correct, R_p_correct = make_test_matrix_for_fabry_pelot_etalon(
                                     n, d, 2 * np.pi / wavelength, n_outer, n_substrate, theta
                                 )
 
                                 M = 1
-                                R_to_be_tested: np.ndarray = _make_matrix(
-                                    0, M, np.array([n]), np.array([d]), 2 * np.pi / wavelength, n_outer, n_substrate, theta
-                                )
+                                args = M, np.array([n]), np.array([d]), 2 * np.pi / wavelength, n_outer, n_substrate, theta
+                                R_s_to_be_tested: npt.NDArray[np.complex_] = _make_matrix(0, *args)
+                                R_p_to_be_tested: npt.NDArray[np.complex_] = _make_matrix(1, *args)
 
-                                err_msg: str = f'n: {n}, d: {d}, wavelength: {wavelength}, n_outer: {n_outer}, ' \
-                                               f'n_substrate: {n_substrate}, theta: {theta}' + \
-                                               '\nR_correct:'+str(R_correct.tolist())+\
-                                               '\n R_to_be_tested:'+str(R_to_be_tested.tolist())
-                                np.testing.assert_allclose(
-                                    R_correct, R_to_be_tested, rtol=0, atol=3e-5,
-                                    err_msg=err_msg)
-                                # np.testing.assert_allclose(
-                                #     R_correct, R_to_be_tested, rtol=0, atol=1e-15,
-                                #     err_msg=err_msg)
+                                for polarisation, R_correct, R_to_be_tested in ('s', R_s_correct, R_s_to_be_tested), ('p', R_p_correct, R_p_to_be_tested):
+                                    err_msg: str = f'polarisation: {polarisation}, n: {n}, d: {d}, wavelength: {wavelength}, n_outer: {n_outer}, ' \
+                                                   f'n_substrate: {n_substrate}, theta: {theta}' + \
+                                                   '\nR_correct:'+str(R_correct)+ \
+                                                   '\n R_to_be_tested:'+str(R_to_be_tested)+ \
+                                                   '\n Difference:'+str(R_correct - R_to_be_tested)
+                                    np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=3e-5, err_msg=err_msg)
+                                    # np.testing.assert_allclose(
+                                    #     R_correct, R_to_be_tested, rtol=0, atol=1e-15,
+                                    #     err_msg=err_msg)
 
     def test_fabry_pelot_etalon(self):
         # Fresnel coefficients
