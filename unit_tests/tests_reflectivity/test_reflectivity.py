@@ -105,7 +105,7 @@ class Test_reflectivity(TestCase):
         # r_12: np.complex_ = (k_x_1 - k_x_2) / (k_x_1 + k_x_2)
         # t_12: np.complex_ = 2 * k_x_1 / (k_x_1 + k_x_2)
 
-        def calculate_reflectivity_using_analytic_formulas(wavelength: np.float_, d: np.float_, n_outer: np.float_, n_layer: np.float_, n_substrate: np.float_, theta_outer: np.float_):
+        def calculate_reflectivity_using_analytic_formulas(wavelength: np.float_, d: np.float_, n_outer: np.float_, n_layer: np.float_, n_substrate: np.float_, theta_outer: np.float_) -> tuple[np.complex_, np.complex_]:
             """
 
             @param wavelength: wavelength in the outer medium. Hence, wavelength in vacuum is "wavelength/n_outer"
@@ -129,27 +129,52 @@ class Test_reflectivity(TestCase):
             cos_theta_substrate = calc_cos_theta_i(n_substrate)
 
             # Fresnel coefficents for s polarisation (TE polarisation)
-            def r_ij(n_i, cos_theta_i, n_j, cos_theta_j):
+            def r_ij_s(n_i, cos_theta_i, n_j, cos_theta_j):
                 return (n_i * cos_theta_i - n_j * cos_theta_j) / (n_i * cos_theta_i + n_j * cos_theta_j)
 
-            def t_ij(n_i, cos_theta_i, n_j, cos_theta_j):
+            def t_ij_s(n_i, cos_theta_i, n_j, cos_theta_j):
                 return 2 * n_i * cos_theta_i / (n_i * cos_theta_i + n_j * cos_theta_j)
 
-            r_12: np.complex_ = r_ij(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
-            t_12: np.complex_ = t_ij(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
+            r_12_s: np.complex_ = r_ij_s(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
+            t_12_s: np.complex_ = t_ij_s(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
 
-            r_23: np.complex_ = r_ij(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
-            t_23: np.complex_ = t_ij(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
+            r_23_s: np.complex_ = r_ij_s(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
+            t_23_s: np.complex_ = t_ij_s(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
 
             self.assertEqual(n_outer, n_substrate)
-            self.assertAlmostEqual(r_12.real, -r_23.real, delta=1e-4, msg='Refractive index of the outer medium and the substrate must be the same.')
-            self.assertAlmostEqual(r_12.imag, -r_23.imag, delta=1e-4, msg='Refractive index of the outer medium and the substrate must be the same.')
+            self.assertAlmostEqual(r_12_s.real, -r_23_s.real, delta=1e-4, msg='Refractive index of the outer medium and the substrate must be the same.')
+            self.assertAlmostEqual(r_12_s.imag, -r_23_s.imag, delta=1e-4, msg='Refractive index of the outer medium and the substrate must be the same.')
 
-            # def reflection_coefficient(r, lambda_0, n, d, cos_theta):
-            r = r_12
+            # Fresnel coefficients for p polarisation (TM polarisation)
+            def r_ij_p(n_i, cos_theta_i, n_j, cos_theta_j):
+                return (n_j * cos_theta_i - n_i * cos_theta_j) / (n_j * cos_theta_i + n_i * cos_theta_j)
+
+            def t_ij_p(n_i, cos_theta_i, n_j, cos_theta_j):
+                return 2 * n_i * cos_theta_i / (n_j * cos_theta_i + n_i * cos_theta_j)
+
+            r_12_p: np.complex_ = r_ij_p(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
+            t_12_p: np.complex_ = t_ij_p(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
+
+            r_23_p: np.complex_ = r_ij_p(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
+            t_23_p: np.complex_ = t_ij_p(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
+
+            self.assertEqual(n_outer, n_substrate)
+            self.assertAlmostEqual(r_12_p.real, -r_23_p.real, delta=1e-4, msg='Refractive index of the outer medium and the substrate must be the same.')
+            self.assertAlmostEqual(r_12_p.imag, -r_23_p.imag, delta=1e-4, msg='Refractive index of the outer medium and the substrate must be the same.')
+
+
             phi = 2 * np.pi / wavelength * n_layer * d * cos_theta_layer / n_outer
-            amplitude = r * (1-np.exp(-2 * 1j * phi)) / (1 - r ** 2 * np.exp(-2 * 1j * phi))
-            return np.abs(amplitude) ** 2
+
+            def amplitude(r, phi):
+                return r * (1-np.exp(-2 * 1j * phi)) / (1 - r ** 2 * np.exp(-2 * 1j * phi))
+
+            r_s = r_12_s
+            amplitude_s = amplitude(r_s, phi)
+
+            r_p = r_12_p
+            amplitude_p = amplitude(r_p, phi)
+
+            return np.abs(amplitude_s) ** 2, np.abs(amplitude_p) ** 2
             # return 4 * (r ** 2) * (np.sin(phi) ** 2) / ((1 - r ** 2) ** 2 + 4 * (r ** 2) * (phi ** 2))
 
         M: int = 1
@@ -168,11 +193,17 @@ class Test_reflectivity(TestCase):
                             # for n_substrate in np.linspace(0.1, 10, num=10):
                             total_internal_reflection: bool = 1. < n_outer / n_layer * np.sin(np.abs(theta_outer))
                             n_substrate = n_outer
-                            R_correct = calculate_reflectivity_using_analytic_formulas(wavelength, d, n_outer, n_layer, n_substrate, theta_outer)
-                            R_to_be_tested = reflectivity(0, M, np.array([n_layer]), np.array([d]), wavelength, n_outer, n_substrate, theta_outer)
-                            err_msg = f'wavelength: {wavelength}, d: {d}, theta_outer: {theta_outer}, n_outer: {n_outer}, n_layer: {n_layer}, total_internal_reflection: {total_internal_reflection}, ' + \
-                                f'R_correct: {R_correct}, R_to_be_tested: {R_to_be_tested}'
-                            self.assertAlmostEqual(R_correct, R_to_be_tested, delta=1e-9, msg=err_msg)
+
+                            R_correct_s, R_correct_p = calculate_reflectivity_using_analytic_formulas(wavelength, d, n_outer, n_layer, n_substrate, theta_outer)
+
+                            args = M, np.array([n_layer]), np.array([d]), wavelength, n_outer, n_substrate, theta_outer
+                            R_to_be_tested_s = reflectivity(0, *args)
+                            R_to_be_tested_p = reflectivity(1, *args)
+
+                            for polarisation, R_correct, R_to_be_tested in ('s', R_correct_s, R_to_be_tested_s), ('p', R_correct_p, R_to_be_tested_p):
+                                err_msg = f'polarisation: {polarisation}, wavelength: {wavelength}, d: {d}, theta_outer: {theta_outer}, n_outer: {n_outer}, n_layer: {n_layer}, total_internal_reflection: {total_internal_reflection}, ' + \
+                                    f'R_correct: {R_correct}, R_to_be_tested: {R_to_be_tested}'
+                                self.assertAlmostEqual(R_correct, R_to_be_tested, delta=2e-5, msg=err_msg)
             # np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=1e-15)
 
         # fig: plt.Figure
@@ -215,30 +246,24 @@ class Test_reflectivity(TestCase):
         theta_outer = 0.
 
         # wavelengths = np.linspace(600, 2300, 1000) * 1e-9
-        R = np.array([reflectivity(
-            0,
-            M,
-            n,
-            d,
-            lam,
-            n_outer,
-            n_substrate,
-            theta_outer
-        )
-            for lam in wavelengths])
+        R_s = np.array([reflectivity(0, M, n, d, lam, n_outer, n_substrate, theta_outer) for lam in wavelengths])
+        R_p = np.array([reflectivity(1, M, n, d, lam, n_outer, n_substrate, theta_outer) for lam in wavelengths])
 
         # diff = R_paper - R
         # print(np.argmax(diff))
 
         # Compare
-        np.testing.assert_allclose(R_paper, R, rtol=0, atol=0.0016)
+        np.testing.assert_allclose(R_paper, R_s, rtol=0, atol=0.0016)
+        np.testing.assert_allclose(R_paper, R_p, rtol=0, atol=0.0016)
 
         # fig, ax = plt.subplots()
         # ax: plt.Axes
-        # ax.plot(wavelengths, R_paper)
-        # ax.plot(wavelengths, R)
+        # ax.plot(wavelengths, R_paper, label='paper')
+        # ax.plot(wavelengths, R_s, label='s-polarisation')
+        # ax.plot(wavelengths, R_p, '.', label='p-polarisation')
         # ax.set_xlabel(r'$\lambda_\mathrm{outer}$ [nm]')
         # ax.set_ylabel('R')
+        # ax.legend()
         # plt.show()
 
     def test_against_plot_2_from_paper_for_dichroic(self):
@@ -264,31 +289,24 @@ class Test_reflectivity(TestCase):
         theta_outer = 0.
 
         # wavelengths = np.linspace(600, 2300, 1000) * 1e-9
-        R = np.array([reflectivity(
-            0,
-            M,
-            n,
-            d,
-            lam,
-            n_outer,
-            n_substrate,
-            theta_outer
-        )
-            for lam in wavelengths])
+        R_s = np.array([reflectivity(0, M, n, d, lam, n_outer, n_substrate, theta_outer) for lam in wavelengths])
+        R_p = np.array([reflectivity(1, M, n, d, lam, n_outer, n_substrate, theta_outer) for lam in wavelengths])
+
+        # Compare
+        np.testing.assert_allclose(R_paper, R_s, rtol=0, atol=0.1443)
+        np.testing.assert_allclose(R_paper, R_p, rtol=0, atol=0.1443)
 
         # fig, ax = plt.subplots()
-        # # figsize=(12, 9), dpi=600
         # ax: plt.Axes
-        # # ax.plot(wavelengths, R_paper, label='R_paper')
-        # ax.plot(wavelengths, R, label='R_calculated')
+        # ax.plot(wavelengths, R_paper, label='paper')
+        # ax.plot(wavelengths, R_s, label='s-polarisation')
+        # ax.plot(wavelengths, R_p, '.', label='p-polarisation')
         # ax.set_xlabel(r'$\lambda_\mathrm{outer}$ [nm]')
         # ax.set_ylabel('R')
         # ax.legend()
         # # ax.set_ylim(0, 1.2)
         # plt.show()
 
-        # Compare
-        np.testing.assert_allclose(R_paper, R, rtol=0, atol=0.1443)
 
     # def test_against_plot_1_from_paper_for_antireflection_coating(self):
     #     df = pd.read_csv('./data/digitised_plots_from_Hobson_Baldwin_2004_paper/plot_1_data.csv')
