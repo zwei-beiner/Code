@@ -8,16 +8,46 @@ import scipy.linalg
 
 def reflectivity(polarisation: int, M: np.int_, n: np.ndarray, d: np.ndarray, wavelength: np.float_, n_outer: np.float_,
                  n_substrate: np.float_, theta_outer: np.float_) -> np.float_:
+    """
+    Calculates the reflectivity.
+    Function arguments are the same as for 'ampltiude()'.
+
+    @return: Reflectivity |amplitude|^2
+    """
+
+    # Note: locals() returns a dictionary with all local variables of the function. When called here, it returns all the
+    # function arguments.
+    return np.abs(amplitude(**locals())) ** 2
+
+
+def phase(polarisation: int, M: np.int_, n: np.ndarray, d: np.ndarray, wavelength: np.float_, n_outer: np.float_,
+                 n_substrate: np.float_, theta_outer: np.float_) -> np.float_:
+    """
+    Calculates phase of the reflected complex amplitude.
+    Function arguments are the same as for 'ampltiude()'.
+
+    @return: Phase in the range (-pi, pi]
+    """
+    return np.float_(np.angle(amplitude(**locals())))
+
+def amplitude(polarisation: int, M: np.int_, n: np.ndarray, d: np.ndarray, wavelength: np.float_, n_outer: np.float_,
+                 n_substrate: np.float_, theta_outer: np.float_) -> np.complex_:
+    """
+    Calculates the reflected complex amplitude by solving the linear system Mx=b for x.
+    Function arguments are the same as for '_make_matrix()'.
+    """
+
     mat: npt.NDArray[np.complex_] = _make_matrix(polarisation, M, n, d, 2 * np.pi / wavelength, n_outer, n_substrate, theta_outer)
     c: npt.NDArray[np.complex_] = _make_vector(M)
-    x: npt.NDArray[np.complex_] = scipy.linalg.solve_banded(l_and_u=(2,2), ab=mat, b=c)
-    return np.abs(x[0]) ** 2
+    # M is a banded matrix so that 'solve_banded' can be used.
+    x: npt.NDArray[np.complex_] = scipy.linalg.solve_banded(l_and_u=(2, 2), ab=mat, b=c)
+    return x[0]
 
 
 def _make_matrix(polarisation: int, M: np.int_, n: npt.NDArray[np.float_], d: npt.NDArray[np.float_], k_outer: np.float_, n_outer: np.float_, n_substrate: np.float_,
                  theta_outer: np.float_) -> npt.NDArray[np.complex_]:
     """
-    Constructs the matrix \mathbf{M}.
+    Constructs the matrix \mathbf{M} in band structure form.
 
     @param polarisation: 0 for s-polarisation and 1 for p-polarisation
     @param M: Number of layers. Valid input range: M ≥ 1
@@ -34,12 +64,17 @@ def _make_matrix(polarisation: int, M: np.int_, n: npt.NDArray[np.float_], d: np
 
     def calc_k_x(n: Union[np.float_, npt.NDArray[np.float_]]) -> Union[np.complex_, npt.NDArray[np.complex_]]:
         # Use np.emath.sqrt (instead of np.sqrt) to return complex numbers if argument of sqrt is negative
+        # print(f'k_outer: {k_outer}' + 'diff cos:' + str(k_outer * (np.cos(theta_outer) - np.emath.sqrt((n_substrate / n_outer) ** 2 - np.sin(theta_outer) ** 2))))
+        # if n == n_outer:
+        #     return k_outer * np.cos(theta_outer) * (n/n)
         return np.complex_(k_outer * np.emath.sqrt((n / n_outer) ** 2 - np.sin(theta_outer) ** 2))
 
     k_x_outer: np.complex_ = np.complex_(k_outer * np.cos(theta_outer))
     k_x: npt.NDArray[np.complex_] = calc_k_x(n)
     # return (n / n_outer) ** 2
     k_x_substrate: np.complex_ = calc_k_x(n_substrate)
+    # print(n_substrate - n_outer)
+    # print(k_x_substrate - k_x_outer)
     phi: npt.NDArray[np.complex_] = k_x * np.complex_(d)
 
     if polarisation == 0:
