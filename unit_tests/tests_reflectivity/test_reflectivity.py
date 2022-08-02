@@ -25,6 +25,24 @@ class Test_reflectivity(TestCase):
     #                     reflectivity_s(M, np.array([0]), np.array([0]), np.float_(500e-9), n_1, n_2, theta_incident),
     #                     delta=1e-15
     #                 )
+    def test_r_and_p_polarisation_give_the_same_reflectivity_for_normal_incidence(self):
+        rng = np.random.default_rng(0)
+
+        theta_outer = 0
+
+        num = 7
+        for M in range(1, 10):
+            for n in (rng.uniform(low=0.1,high=10,size=M) for _ in range(num)):
+                for d in (rng.uniform(low=1,high=1e3,size=M) * 1e-9 for _ in range(num)):
+                    for wavelength in np.linspace(200, 3000, num=num) * 1e-9:
+                        for n_outer in np.linspace(0.1, 10, num=num):
+                            for n_substrate in np.linspace(0.1, 10, num=num):
+                                args = M, n, d, wavelength, n_outer, n_substrate, theta_outer
+                                R_s = reflectivity(0, *args)
+                                R_p = reflectivity(1, *args)
+
+                                np.testing.assert_allclose(R_s, R_p, rtol=0, atol=1.6e-13)
+
 
     def test_make_matrix(self):
         """
