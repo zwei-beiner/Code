@@ -62,13 +62,6 @@ def _make_matrix(polarisation: int, M: np.int_, n: npt.NDArray[np.float_], d: np
     """
     # assert len(n) == M and len(d) == M
 
-    # def calc_k_x(n: Union[np.float_, npt.NDArray[np.float_]]) -> Union[np.complex_, npt.NDArray[np.complex_]]:
-    #     # Use np.emath.sqrt (instead of np.sqrt) to return complex numbers if argument of sqrt is negative
-    #     # print(f'k_outer: {k_outer}' + 'diff cos:' + str(k_outer * (np.cos(theta_outer) - np.emath.sqrt((n_substrate / n_outer) ** 2 - np.sin(theta_outer) ** 2))))
-    #     # if n == n_outer:
-    #     #     return k_outer * np.cos(theta_outer) * (n/n)
-    #     return np.complex_(k_outer * np.emath.sqrt((n / n_outer) ** 2 - np.sin(theta_outer) ** 2))
-
     def calc_cos_theta(n: Union[np.float_, npt.NDArray[np.float_]]) -> Union[np.complex_, npt.NDArray[np.complex_]]:
         return np.emath.sqrt(1 - (n_outer / n) ** 2 * np.sin(theta_outer) ** 2)
 
