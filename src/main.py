@@ -39,7 +39,7 @@ def amplitude(polarisation: int, M: np.int_, n: np.ndarray, d: np.ndarray, wavel
 
     mat: npt.NDArray[np.complex_] = _make_matrix(polarisation, M, n, d, 2 * np.pi / wavelength, n_outer, n_substrate, theta_outer)
     c: npt.NDArray[np.complex_] = _make_vector(M)
-    # M is a banded matrix so that 'solve_banded' can be used.
+    # M is a banded matrix so that 'solve_banded' can be used. Flags are set for performance.
     x: npt.NDArray[np.complex_] = scipy.linalg.solve_banded(l_and_u=(2, 2), ab=mat, b=c, overwrite_ab=True, overwrite_b=True, check_finite=False)
     return x[0]
 
@@ -62,6 +62,7 @@ def _make_matrix(polarisation: int, M: np.int_, n: npt.NDArray[np.float_], d: np
     """
     # assert len(n) == M and len(d) == M
 
+    # Concatenate arrays to call np.sqrt only once, which increases performance.
     all_n = np.concatenate([np.array([n_outer]), n, np.array([n_substrate])])
     all_cos_theta = np.sqrt(np.complex_(1 - (n_outer / all_n) ** 2 * np.sin(theta_outer) ** 2))
 
@@ -69,6 +70,7 @@ def _make_matrix(polarisation: int, M: np.int_, n: npt.NDArray[np.float_], d: np
     cos_theta: npt.NDArray[np.complex_] = all_cos_theta[1:M+1]
     cos_theta_substrate: np.complex_ = all_cos_theta[M+1]
 
+    # Pre-compute complex exponentials for performance increase.
     exps: npt.NDArray[np.complex_] = np.exp(1j * (k_outer * d) * (n / n_outer) * cos_theta)
 
     if polarisation == 0:
