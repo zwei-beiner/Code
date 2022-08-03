@@ -25,6 +25,86 @@ class Test_reflectivity(TestCase):
     #                     reflectivity_s(M, np.array([0]), np.array([0]), np.float_(500e-9), n_1, n_2, theta_incident),
     #                     delta=1e-15
     #                 )
+    def test_comparison_with_transfer_matrices(self):
+        def amplitude_from_transfer_matrix(polarisation: int, M: np.int_, n: np.ndarray, d: np.ndarray, wavelength: np.float_, n_outer: np.float_,
+             n_substrate: np.float_, theta_outer: np.float_) -> npt.NDArray[np.complex_]:
+            # Angles in layer and substrate
+            def calc_cos_theta_i(n):
+                # Snell's law
+                sin_theta_i = n_outer * np.sin(theta_outer) / n
+                # Note: Cosine can be complex
+                cos_theta_i = np.emath.sqrt(1 - sin_theta_i ** 2)
+                return cos_theta_i
+
+            cos_theta_outer = np.cos(theta_outer)
+            cos_theta_layer = calc_cos_theta_i(n)
+            cos_theta_substrate = calc_cos_theta_i(n_substrate)
+
+            n = np.append(n, n_substrate)
+            cos_theta_layer = np.append(cos_theta_layer, cos_theta_substrate)
+
+            # Fresnel coefficents for s polarisation (TE polarisation)
+            def r_ij_s(n_i, cos_theta_i, n_j, cos_theta_j):
+                return (n_i * cos_theta_i - n_j * cos_theta_j) / (n_i * cos_theta_i + n_j * cos_theta_j)
+
+            def t_ij_s(n_i, cos_theta_i, n_j, cos_theta_j):
+                return 2 * n_i * cos_theta_i / (n_i * cos_theta_i + n_j * cos_theta_j)
+
+            # Fresnel coefficients for p polarisation (TM polarisation)
+            def r_ij_p(n_i, cos_theta_i, n_j, cos_theta_j):
+                return -(n_j * cos_theta_i - n_i * cos_theta_j) / (n_j * cos_theta_i + n_i * cos_theta_j)
+
+            def t_ij_p(n_i, cos_theta_i, n_j, cos_theta_j):
+                return 2 * n_i * cos_theta_i / (n_j * cos_theta_i + n_i * cos_theta_j)
+
+            def transfer_matrix(r_ij, t_ij):
+                def T_ij(n_i, cos_theta_i, n_j, cos_theta_j):
+                    return np.array([
+                        [1, r_ij(n_i, cos_theta_i, n_j, cos_theta_j)],
+                        [r_ij(n_i, cos_theta_i, n_j, cos_theta_j), 1]
+                    ]) / t_ij(n_i, cos_theta_i, n_j, cos_theta_j)
+
+                def T_i(n_i, cos_theta_i, d_i):
+                    phi = 2 * np.pi / wavelength * n_i / n_outer * d_i * cos_theta_i
+                    return np.array([
+                        [np.exp(-1j * phi), 0],
+                        [0, np.exp(1j * phi)]
+                    ])
+
+                T = np.eye(2)
+                T_01 = T_ij(n_outer, cos_theta_outer, n[0], cos_theta_layer[0])
+                T = np.matmul(T, T_01)
+                for i in range(1, M+1):
+                    T = np.matmul(T, T_i(n[i - 1], cos_theta_layer[i - 1], d[i - 1]))
+                    T = np.matmul(T, T_ij(n[i - 1], cos_theta_layer[i - 1], n[i], cos_theta_layer[i]))
+                return T
+
+            if polarisation == 0:
+                T = transfer_matrix(r_ij_s, t_ij_s)
+            else:
+                T = transfer_matrix(r_ij_p, t_ij_p)
+
+
+            return T[1, 0] / T[0, 0]
+
+        rng = np.random.default_rng(0)
+        num = 7
+        for M in range(1, 10):
+            print(M)
+            for n in (rng.uniform(low=0.1, high=10, size=M) for _ in range(num)):
+                for d in (rng.uniform(low=1, high=1e3, size=M) * 1e-9 for _ in range(num)):
+                    for wavelength in np.linspace(200, 3000, num=num) * 1e-9:
+                        for n_outer in np.linspace(0.1, 10, num=num):
+                            for n_substrate in np.linspace(0.1, 10, num=num):
+                                for theta_outer in np.linspace(-np.pi/2 + 1e-3, np.pi/2 - 1e-3, num=num):
+                                    for polarisation in 0, 1:
+                                        args = polarisation, M, n, d, wavelength, n_outer, n_substrate, theta_outer
+                                        b_0_transfer_matrix = amplitude_from_transfer_matrix(*args)
+                                        b_0_to_be_tested = amplitude(*args)
+                                        self.assertAlmostEqual(b_0_transfer_matrix.real, b_0_to_be_tested.real, delta=2e-8)
+                                        self.assertAlmostEqual(b_0_transfer_matrix.imag, b_0_to_be_tested.imag, delta=4e-10)
+
+
     def test_r_and_p_polarisation_give_the_same_amplitude_for_normal_incidence(self):
         rng = np.random.default_rng(0)
 
@@ -54,37 +134,29 @@ class Test_reflectivity(TestCase):
         def make_test_matrix_for_fabry_pelot_etalon(n: np.float_, d: np.float_, k_outer: np.float_,
                                                     n_outer: np.float_, n_substrate: np.float_,
                                                     theta_outer: np.float_) -> tuple[npt.NDArray[np.complex_], npt.NDArray[np.complex_]]:
-            k_x_outer: np.complex_ = np.complex_(k_outer * np.cos(theta_outer))
-            k_x_layer: np.complex_ = np.complex_(k_outer * np.emath.sqrt((n / n_outer) ** 2 - np.sin(theta_outer) ** 2))
-            # return np.array([(n / n_outer) ** 2])
-            k_x_substrate: np.complex_ = k_outer * np.emath.sqrt(np.complex_((n_substrate / n_outer) ** 2 - np.sin(theta_outer) ** 2))
+            cos_theta_outer = np.complex_(np.cos(theta_outer))
+            cos_theta_layer = np.complex_(np.emath.sqrt(1 - (n_outer / n) ** 2 * np.sin(theta_outer) ** 2))
+            cos_theta_substrate = np.complex_(np.emath.sqrt(1 - (n_outer / n_substrate) ** 2 * np.sin(theta_outer) ** 2))
 
-            phi_0: np.complex_ = k_x_layer * np.complex_(d)
-
-            # mat = np.array([
-            #     [-1, 1, np.exp(1j * phi_0), 0],
-            #     [1, k_x_layer / k_x_outer, -k_x_layer / k_x_outer * np.exp(1j * phi_0), 0],
-            #     [0, -np.exp(1j * phi_0), -1, 1],
-            #     [0, -np.exp(1j * phi_0) * k_x_layer, k_x_layer, k_x_substrate]
-            # ])
+            phi_0 = np.complex_((k_outer * d) * (n / n_outer) * cos_theta_layer)
 
             # Matrix for s polarisation
             mat_s: npt.NDArray[np.complex_] = np.array([
-                [0,     0,                                  np.exp(1j * phi_0),                             0],
-                [0,     1,                                  -k_x_layer / k_x_outer * np.exp(1j * phi_0),    1],
-                [-1,    k_x_layer / k_x_outer,              -1,                                             k_x_substrate],
-                [1,     -np.exp(1j * phi_0),                k_x_layer,                                      0],
-                [0,     -np.exp(1j * phi_0) * k_x_layer,    0,                                              0]
+                [0,     0,                                                      np.exp(1j * phi_0),                                                           0],
+                [0,     1,                                                      -(n / n_outer) * (cos_theta_layer / cos_theta_outer) * np.exp(1j * phi_0),    1],
+                [-1,    (n / n_outer) * (cos_theta_layer / cos_theta_outer),    -1,                                                                           n_substrate * cos_theta_substrate],
+                [1,     -np.exp(1j * phi_0),                                    n * cos_theta_layer,                                                          0],
+                [0,     -np.exp(1j * phi_0) * n * cos_theta_layer,              0,                                                                            0]
             ], dtype=np.complex_)
 
             # Matrix for p polarisation
             mat_p: npt.NDArray[np.complex_] = np.array([
-                [0,     0,                                      np.exp(1j * phi_0) * k_x_layer / n * n_outer / k_x_outer,   0],
-                [0,     k_x_layer / n * n_outer / k_x_outer,    -np.exp(1j * phi_0) * n / n_outer,                          k_x_substrate / n_substrate],
-                [-1,    n / n_outer,                            -k_x_layer / n,                                             n_substrate],
-                [1,     -np.exp(1j * phi_0) * k_x_layer / n,    n,                                                          0],
-                [0,     -np.exp(1j * phi_0) * n,                0,                                                          0]
-            ])
+                [0,     0,                                      np.exp(1j * phi_0) * cos_theta_layer / cos_theta_outer,   0],
+                [0,     cos_theta_layer / cos_theta_outer,    -np.exp(1j * phi_0) * n / n_outer,                          cos_theta_substrate],
+                [-1,    n / n_outer,                            -cos_theta_layer,                                         n_substrate],
+                [1,     -np.exp(1j * phi_0) * cos_theta_layer,    n,                                                      0],
+                [0,     -np.exp(1j * phi_0) * n,                0,                                                        0]
+            ], dtype=np.complex_)
 
             return mat_s, mat_p
 
@@ -113,10 +185,8 @@ class Test_reflectivity(TestCase):
                                                    '\nR_correct:'+str(R_correct)+ \
                                                    '\n R_to_be_tested:'+str(R_to_be_tested)+ \
                                                    '\n Difference:'+str(R_correct - R_to_be_tested)
-                                    np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=3e-5, err_msg=err_msg)
-                                    # np.testing.assert_allclose(
-                                    #     R_correct, R_to_be_tested, rtol=0, atol=1e-15,
-                                    #     err_msg=err_msg)
+                                    np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=1e-15, err_msg=err_msg)
+
 
     def test_fabry_pelot_etalon(self):
         # Fresnel coefficients
@@ -126,15 +196,24 @@ class Test_reflectivity(TestCase):
         # t_12: np.complex_ = 2 * k_x_1 / (k_x_1 + k_x_2)
 
         def calculate_amplitudes_using_analytic_formulas(wavelength: np.float_, d: np.float_, n_outer: np.float_, n_layer: np.float_, n_substrate: np.float_, theta_outer: np.float_) -> tuple[np.complex_, np.complex_]:
-            k_outer = 2 * np.pi / wavelength
-            k_x_outer = k_outer * np.cos(theta_outer)
+            # k_outer = 2 * np.pi / wavelength
+            # k_x_outer = k_outer * np.cos(theta_outer)
             costhetalayer = np.emath.sqrt(1 - (n_outer * np.sin(theta_outer) / n_layer) ** 2)
-            k_layer = n_layer * k_outer / n_outer
-            k_x_layer = k_layer * costhetalayer
-            phi_0 = k_x_layer * d
+            # k_layer = n_layer * k_outer / n_outer
+            # k_x_layer = k_layer * costhetalayer
+            # phi_0 = k_x_layer * d
 
-            r_s = (k_x_outer - k_x_layer) / (k_x_outer + k_x_layer)
-            r_p = (n_outer ** 2 * k_x_layer - n_layer ** 2 * k_x_outer) / (n_outer ** 2 * k_x_layer + n_layer ** 2 * k_x_outer)
+
+            # r_s = (k_x_outer - k_x_layer) / (k_x_outer + k_x_layer)
+            # r_p = (n_outer ** 2 * k_x_layer - n_layer ** 2 * k_x_outer) / (n_outer ** 2 * k_x_layer + n_layer ** 2 * k_x_outer)
+            #
+
+            phi_0 = (2 * np.pi / wavelength * d) * (n_layer / n_outer) * costhetalayer
+            cos_theta_outer = np.cos(theta_outer)
+            cos_theta_substrate = np.emath.sqrt(1 - (n_outer * np.sin(theta_outer) / n_substrate) ** 2)
+
+            r_s = (n_outer * cos_theta_outer - n_layer * costhetalayer) / (n_outer * cos_theta_outer + n_layer * costhetalayer)
+            r_p = -(n_layer * cos_theta_outer - n_outer * costhetalayer) / (n_layer * cos_theta_outer + n_outer * costhetalayer)
 
             def amplitude(r, phi_0):
                 numerator = r * (1 - np.exp(2 * 1j * phi_0))
@@ -245,7 +324,7 @@ class Test_reflectivity(TestCase):
 
         for wavelength in np.linspace(200, 3000, num=10) * 1e-9:
             for d in np.linspace(1, 1e3, num=10) * 1e-9:
-                for theta_outer in np.linspace(-np.pi/2 + 1e-6, np.pi/2 - 1e-6, num=20):
+                for theta_outer in np.linspace(-np.pi/2 + 1e-3, np.pi/2 - 1e-3, num=20):
                     for n_outer in np.linspace(0.1, 10, num=10):
                         for n_layer in np.linspace(0.1, 10, num=10):
                             # for n_substrate in np.linspace(0.1, 10, num=10):
@@ -261,8 +340,8 @@ class Test_reflectivity(TestCase):
                             for polarisation, b_0_correct, b_0_to_be_tested in ('s', b_0_correct_s, b_0_to_be_tested_s), ('p', b_0_correct_p, b_0_to_be_tested_p):
                                 err_msg = f'polarisation: {polarisation}, wavelength: {wavelength}, d: {d}, theta_outer: {theta_outer}, n_outer: {n_outer}, n_layer: {n_layer}, total_internal_reflection: {total_internal_reflection}, ' + \
                                     f'b_0_correct: {b_0_correct, np.abs(b_0_correct) ** 2}, b_0_to_be_tested: {b_0_to_be_tested, np.abs(b_0_to_be_tested) ** 2}'
-                                self.assertAlmostEqual(b_0_correct.real, b_0_to_be_tested.real, delta=1e-4, msg=err_msg)
-                                self.assertAlmostEqual(b_0_correct.imag, b_0_correct.imag, delta=1e-4, msg=err_msg)
+                                self.assertAlmostEqual(b_0_correct.real, b_0_to_be_tested.real, delta=1e-11, msg=err_msg)
+                                self.assertAlmostEqual(b_0_correct.imag, b_0_correct.imag, delta=1e-11, msg=err_msg)
             # np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=1e-15)
 
         # fig: plt.Figure

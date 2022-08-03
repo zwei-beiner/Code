@@ -62,26 +62,36 @@ def _make_matrix(polarisation: int, M: np.int_, n: npt.NDArray[np.float_], d: np
     """
     # assert len(n) == M and len(d) == M
 
-    def calc_k_x(n: Union[np.float_, npt.NDArray[np.float_]]) -> Union[np.complex_, npt.NDArray[np.complex_]]:
-        # Use np.emath.sqrt (instead of np.sqrt) to return complex numbers if argument of sqrt is negative
-        # print(f'k_outer: {k_outer}' + 'diff cos:' + str(k_outer * (np.cos(theta_outer) - np.emath.sqrt((n_substrate / n_outer) ** 2 - np.sin(theta_outer) ** 2))))
-        # if n == n_outer:
-        #     return k_outer * np.cos(theta_outer) * (n/n)
-        return np.complex_(k_outer * np.emath.sqrt((n / n_outer) ** 2 - np.sin(theta_outer) ** 2))
+    # def calc_k_x(n: Union[np.float_, npt.NDArray[np.float_]]) -> Union[np.complex_, npt.NDArray[np.complex_]]:
+    #     # Use np.emath.sqrt (instead of np.sqrt) to return complex numbers if argument of sqrt is negative
+    #     # print(f'k_outer: {k_outer}' + 'diff cos:' + str(k_outer * (np.cos(theta_outer) - np.emath.sqrt((n_substrate / n_outer) ** 2 - np.sin(theta_outer) ** 2))))
+    #     # if n == n_outer:
+    #     #     return k_outer * np.cos(theta_outer) * (n/n)
+    #     return np.complex_(k_outer * np.emath.sqrt((n / n_outer) ** 2 - np.sin(theta_outer) ** 2))
 
-    k_x_outer: np.complex_ = np.complex_(k_outer * np.cos(theta_outer))
-    k_x: npt.NDArray[np.complex_] = calc_k_x(n)
-    # return (n / n_outer) ** 2
-    k_x_substrate: np.complex_ = calc_k_x(n_substrate)
-    # print(n_substrate - n_outer)
-    # print(k_x_substrate - k_x_outer)
-    phi: npt.NDArray[np.complex_] = k_x * np.complex_(d)
+    def calc_cos_theta(n: Union[np.float_, npt.NDArray[np.float_]]) -> Union[np.complex_, npt.NDArray[np.complex_]]:
+        return np.emath.sqrt(1 - (n_outer / n) ** 2 * np.sin(theta_outer) ** 2)
+
+    # k_x_outer: np.complex_ = np.complex_(k_outer * np.cos(theta_outer))
+    # k_x: npt.NDArray[np.complex_] = calc_k_x(n)
+    # # return (n / n_outer) ** 2
+    # k_x_substrate: np.complex_ = calc_k_x(n_substrate)
+    # # print(n_substrate - n_outer)
+    # # print(k_x_substrate - k_x_outer)
+    # phi: npt.NDArray[np.complex_] = k_x * np.complex_(d)
+
+    cos_theta_outer: np.complex_ = np.complex_(np.cos(theta_outer))
+    cos_theta: npt.NDArray[np.complex_] = calc_cos_theta(n)
+    cos_theta_substrate: np.complex_ = calc_cos_theta(n_substrate)
+
+    phi: npt.NDArray[np.complex_] = (k_outer * d) * (n / n_outer) * cos_theta
+    # print(n_outer * cos_theta_outer - n_substrate * cos_theta_substrate) if n_outer * cos_theta_outer - n_substrate * cos_theta_substrate > 1e-10 else None
 
     if polarisation == 0:
-        (a, b, c, d, alphas, betas) = _make_s_pol_submatrices(M, phi, k_x, k_x_outer, k_x_substrate)
+        (a, b, c, d, alphas, betas) = _make_s_pol_submatrices(M, phi, cos_theta, cos_theta_outer, cos_theta_substrate, n, n_outer, n_substrate)
     elif polarisation == 1:
-        (a, b, c, d, alphas, betas) = _make_p_pol_submatrices(M, phi, k_x, k_x_outer, k_x_substrate, n_outer,
-                                                              n_substrate, n)
+        (a, b, c, d, alphas, betas) = _make_p_pol_submatrices(M, phi, cos_theta, cos_theta_outer, cos_theta_substrate, n, n_outer,
+                                                              n_substrate)
     else:
         raise ValueError(f'Invalid argument: polarisation = {polarisation}')
 
@@ -106,46 +116,59 @@ def _make_matrix(polarisation: int, M: np.int_, n: npt.NDArray[np.float_], d: np
     return mat
 
 
-def _make_s_pol_submatrices(M: np.int_, phi: npt.NDArray[np.complex_], k_x: npt.NDArray[np.complex_],
-                            k_x_outer: np.complex_, k_x_substrate: np.complex_) \
+def _make_s_pol_submatrices(M: np.int_, phi: npt.NDArray[np.complex_], cos_theta: npt.NDArray[np.complex_],
+                            cos_theta_outer: np.complex_, cos_theta_substrate: np.complex_, n: npt.NDArray[np.float_],
+                            n_outer: np.float_, n_substrate: np.float_) \
         -> tuple[np.complex_, np.complex_, np.complex_, np.complex_, list[npt.NDArray[np.complex_]], list[npt.NDArray[np.complex_]]]:
     a: np.complex_ = np.complex_(-1)
     b: np.complex_ = np.complex_(1)
     c: np.complex_ = np.complex_(1)
-    d: np.complex_ = k_x_substrate
+    d: np.complex_ = np.complex_(n_substrate * cos_theta_substrate)
 
     alphas: list[npt.NDArray[np.complex_]] = [
-        np.array([[-np.exp(1j * phi[j - 1]), -1], [-np.exp(1j * phi[j - 1]) * k_x[j - 1], k_x[j - 1]]], dtype=np.complex_)
+        np.array([[-np.exp(1j * phi[j - 1]), -1],
+                  [-np.exp(1j * phi[j - 1]) * n[j - 1] * cos_theta[j - 1], n[j - 1] * cos_theta[j - 1]]],
+        dtype=np.complex_)
         for j in range(1, M + 1)
     ]
 
     betas: list[npt.NDArray[np.complex_]] = [
-        np.array([[1, np.exp(1j * phi[0])], [k_x[0] / k_x_outer, -k_x[0] / k_x_outer * np.exp(1j * phi[0])]], dtype=np.complex_)
+        np.array([[1, np.exp(1j * phi[0])],
+                  [(n[0] / n_outer) * (cos_theta[0] / cos_theta_outer), -(n[0] / n_outer) * (cos_theta[0] / cos_theta_outer) * np.exp(1j * phi[0])]],
+        dtype=np.complex_)
     ] + [
-        np.array([[1, np.exp(1j * phi[j])], [k_x[j], -k_x[j] * np.exp(1j * phi[j])]], dtype=np.complex_)
+        np.array([[1, np.exp(1j * phi[j])],
+                  [n[j] * cos_theta[j], -n[j] * cos_theta[j] * np.exp(1j * phi[j])]],
+        dtype=np.complex_)
         for j in range(1, M)
     ]
 
     return (a, b, c, d, alphas, betas)
 
 
-def _make_p_pol_submatrices(M: np.int_, phi: npt.NDArray[np.complex_], k_x: npt.NDArray[np.complex_],
-                            k_x_outer: np.complex_, k_x_substrate: np.complex_, n_outer: np.float_, n_substrate: np.float_, n: npt.NDArray[np.float_]) \
+def _make_p_pol_submatrices(M: np.int_, phi: npt.NDArray[np.complex_], cos_theta: npt.NDArray[np.complex_],
+                            cos_theta_outer: np.complex_, cos_theta_substrate: np.complex_, n: npt.NDArray[np.float_], n_outer: np.float_, n_substrate: np.float_) \
         -> tuple[np.complex_, np.complex_, np.complex_, np.complex_, list[npt.NDArray[np.complex_]], list[npt.NDArray[np.complex_]]]:
     a: np.complex_ = np.complex_(-1)
     b: np.complex_ = np.complex_(1)
-    c: np.complex_ = np.complex_(k_x_substrate / n_substrate)
+    c: np.complex_ = np.complex_(cos_theta_substrate)
     d: np.complex_ = np.complex_(n_substrate)
 
     alphas: list[npt.NDArray[np.complex_]] = [
-        np.array([[-np.exp(1j * phi[j-1]) * k_x[j-1] / n[j-1], -k_x[j-1] /  n[j-1]], [-np.exp(1j * phi[j-1]) * n[j-1],n[j-1]]], dtype=np.complex_)
+        np.array([[-np.exp(1j * phi[j-1]) * cos_theta[j - 1], -cos_theta[j - 1]],
+                  [-np.exp(1j * phi[j-1]) * n[j-1], n[j-1]]],
+        dtype=np.complex_)
         for j in range(1, M + 1)
     ]
 
     betas: list[npt.NDArray[np.complex_]] = [
-        np.array([[k_x[0] / n[0] * n_outer / k_x_outer, np.exp(1j * phi[0]) * k_x[0] / n[0] * n_outer / k_x_outer], [n[0] / n_outer, -np.exp(1j * phi[0]) * n[0] / n_outer]], dtype=np.complex_)
+        np.array([[cos_theta[0] / cos_theta_outer, np.exp(1j * phi[0]) * cos_theta[0] / cos_theta_outer],
+                  [n[0] / n_outer, -np.exp(1j * phi[0]) * n[0] / n_outer]],
+        dtype=np.complex_)
     ] + [
-        np.array([[k_x[j] / n[j], np.exp(1j * phi[j]) * k_x[j] / n[j]], [n[j], -np.exp(1j * phi[j]) * n[j]]], dtype=np.complex_)
+        np.array([[cos_theta[j], np.exp(1j * phi[j]) * cos_theta[j]],
+                  [n[j], -np.exp(1j * phi[j]) * n[j]]],
+        dtype=np.complex_)
         for j in range(1, M)
     ]
 
