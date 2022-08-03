@@ -85,7 +85,7 @@ def _make_matrix(polarisation: int, M: np.int_, n: npt.NDArray[np.float_], d: np
         np.array([[0], [c], [d], [0], [0]], dtype=np.complex_)
     ])
 
-    # assert mat.shape[0] == 5 and mat.shape[1] == 2 * M + 2
+    #assert mat.shape[0] == 5 and mat.shape[1] == 2 * M + 2
     return mat
 
 
