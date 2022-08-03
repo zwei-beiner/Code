@@ -40,7 +40,7 @@ def amplitude(polarisation: int, M: np.int_, n: np.ndarray, d: np.ndarray, wavel
     mat: npt.NDArray[np.complex_] = _make_matrix(polarisation, M, n, d, 2 * np.pi / wavelength, n_outer, n_substrate, theta_outer)
     c: npt.NDArray[np.complex_] = _make_vector(M)
     # M is a banded matrix so that 'solve_banded' can be used.
-    x: npt.NDArray[np.complex_] = scipy.linalg.solve_banded(l_and_u=(2, 2), ab=mat, b=c)
+    x: npt.NDArray[np.complex_] = scipy.linalg.solve_banded(l_and_u=(2, 2), ab=mat, b=c, overwrite_ab=True, overwrite_b=True, check_finite=False)
     return x[0]
 
 
