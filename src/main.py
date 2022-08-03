@@ -63,7 +63,7 @@ def _make_matrix(polarisation: int, M: np.int_, n: npt.NDArray[np.float_], d: np
     # assert len(n) == M and len(d) == M
 
     def calc_cos_theta(n: Union[np.float_, npt.NDArray[np.float_]]) -> Union[np.complex_, npt.NDArray[np.complex_]]:
-        return np.emath.sqrt(1 - (n_outer / n) ** 2 * np.sin(theta_outer) ** 2)
+        return np.sqrt(np.complex_(1 - (n_outer / n) ** 2 * np.sin(theta_outer) ** 2))
 
     cos_theta_outer: np.complex_ = np.complex_(np.cos(theta_outer))
     cos_theta: npt.NDArray[np.complex_] = calc_cos_theta(n)
