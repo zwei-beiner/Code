@@ -65,20 +65,11 @@ def _make_matrix(polarisation: int, M: np.int_, n: npt.NDArray[np.float_], d: np
     def calc_cos_theta(n: Union[np.float_, npt.NDArray[np.float_]]) -> Union[np.complex_, npt.NDArray[np.complex_]]:
         return np.emath.sqrt(1 - (n_outer / n) ** 2 * np.sin(theta_outer) ** 2)
 
-    # k_x_outer: np.complex_ = np.complex_(k_outer * np.cos(theta_outer))
-    # k_x: npt.NDArray[np.complex_] = calc_k_x(n)
-    # # return (n / n_outer) ** 2
-    # k_x_substrate: np.complex_ = calc_k_x(n_substrate)
-    # # print(n_substrate - n_outer)
-    # # print(k_x_substrate - k_x_outer)
-    # phi: npt.NDArray[np.complex_] = k_x * np.complex_(d)
-
     cos_theta_outer: np.complex_ = np.complex_(np.cos(theta_outer))
     cos_theta: npt.NDArray[np.complex_] = calc_cos_theta(n)
     cos_theta_substrate: np.complex_ = calc_cos_theta(n_substrate)
 
     phi: npt.NDArray[np.complex_] = (k_outer * d) * (n / n_outer) * cos_theta
-    # print(n_outer * cos_theta_outer - n_substrate * cos_theta_substrate) if n_outer * cos_theta_outer - n_substrate * cos_theta_substrate > 1e-10 else None
 
     if polarisation == 0:
         (a, b, c, d, alphas, betas) = _make_s_pol_submatrices(M, phi, cos_theta, cos_theta_outer, cos_theta_substrate, n, n_outer, n_substrate)

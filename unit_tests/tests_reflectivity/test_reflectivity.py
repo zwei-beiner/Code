@@ -25,6 +25,7 @@ class Test_reflectivity(TestCase):
     #                     reflectivity_s(M, np.array([0]), np.array([0]), np.float_(500e-9), n_1, n_2, theta_incident),
     #                     delta=1e-15
     #                 )
+
     def test_comparison_with_transfer_matrices(self):
         def amplitude_from_transfer_matrix(polarisation: int, M: np.int_, n: np.ndarray, d: np.ndarray, wavelength: np.float_, n_outer: np.float_,
              n_substrate: np.float_, theta_outer: np.float_) -> npt.NDArray[np.complex_]:
@@ -189,24 +190,19 @@ class Test_reflectivity(TestCase):
 
 
     def test_fabry_pelot_etalon(self):
-        # Fresnel coefficients
-        # def calc_k_x(n):
-        #     return k_outer * np.sqrt((n / n_outer) ** 2 - np.sin(theta_outer) ** 2)
-        # r_12: np.complex_ = (k_x_1 - k_x_2) / (k_x_1 + k_x_2)
-        # t_12: np.complex_ = 2 * k_x_1 / (k_x_1 + k_x_2)
-
         def calculate_amplitudes_using_analytic_formulas(wavelength: np.float_, d: np.float_, n_outer: np.float_, n_layer: np.float_, n_substrate: np.float_, theta_outer: np.float_) -> tuple[np.complex_, np.complex_]:
-            # k_outer = 2 * np.pi / wavelength
-            # k_x_outer = k_outer * np.cos(theta_outer)
+            """
+            Calculates the reflected amplitude directly.
+
+            @param wavelength: wavelength in the outer medium. Hence, wavelength in vacuum is "wavelength/n_outer"
+            @param d: thickness of the layer in meters
+            @param n_outer: refractive index of the outer medium
+            @param n_layer: refractive index of the inner medium
+            @param n_substrate: refractive index of the outer medium. Must be the same as the n_outer
+            @param theta_outer: angle of incidence, i.e. angle to the normal in the outer medium. Can be in the range -pi/2<theta_outer<pi/2
+            """
+
             costhetalayer = np.emath.sqrt(1 - (n_outer * np.sin(theta_outer) / n_layer) ** 2)
-            # k_layer = n_layer * k_outer / n_outer
-            # k_x_layer = k_layer * costhetalayer
-            # phi_0 = k_x_layer * d
-
-
-            # r_s = (k_x_outer - k_x_layer) / (k_x_outer + k_x_layer)
-            # r_p = (n_outer ** 2 * k_x_layer - n_layer ** 2 * k_x_outer) / (n_outer ** 2 * k_x_layer + n_layer ** 2 * k_x_outer)
-            #
 
             phi_0 = (2 * np.pi / wavelength * d) * (n_layer / n_outer) * costhetalayer
             cos_theta_outer = np.cos(theta_outer)
@@ -219,17 +215,10 @@ class Test_reflectivity(TestCase):
                 numerator = r * (1 - np.exp(2 * 1j * phi_0))
                 denominator = (1 - (r ** 2) * np.exp(2 * 1j * phi_0))
                 return numerator / denominator
-                # Calculate like this because it's numerically more stable
-                # numerator = r * (1 - np.exp(2 * 1j * phi_0))
-                # denominator = (1 - (r ** 2) * np.exp(2 * 1j * phi_0))
-                # res = numerator * np.conjugate(denominator) / np.abs(denominator) ** 2
-                # return res
+
             amplitude_s = amplitude(r_s, phi_0)
             amplitude_p = amplitude(r_p, phi_0)
 
-            # numerator = (1 - np.exp(2 * 1j * phi_0))
-            # denominator = (1 - (r_s ** 2) * np.exp(2 * 1j * phi_0))
-            #
             # print(f'r_s: {r_s}, phi_0: {phi_0}, '
             #       f'amplitude (problem): {r_s * (1 - np.exp(2 * 1j * phi_0)) / (1 - (r_s ** 2) * np.exp(2 * 1j * phi_0))}'
             #       f'amplitude (new): {numerator / denominator}'
@@ -237,90 +226,9 @@ class Test_reflectivity(TestCase):
             #       f'numerator: {(1 - np.exp(2 * 1j * phi_0))}, '
             #       f'denominator: {(1 - (r_s ** 2) * np.exp(2 * 1j * phi_0))}'
             #       f'new refkectivity: {np.abs(amplitude_s) ** 2}')
-            # return r_s * (1 - np.exp(2 * 1j * phi_0)) / (1 - (r_s ** 2) * np.exp(2 * 1j * phi_0)), r_p * (1 - np.exp(2 * 1j * phi_0)) / (1 - (r_p ** 2) * np.exp(2 * 1j * phi_0))
             return amplitude_s, amplitude_p
-            # return r_s * (1 - np.exp(2 * 1j * phi_0) / (1 - (r_s ** 2) * np.exp(2 * 1j * phi_0))), 0
-
-        # def calculate_amplitudes_using_analytic_formulas(wavelength: np.float_, d: np.float_, n_outer: np.float_, n_layer: np.float_, n_substrate: np.float_, theta_outer: np.float_) -> tuple[np.complex_, np.complex_]:
-        #     """
-        #
-        #     @param wavelength: wavelength in the outer medium. Hence, wavelength in vacuum is "wavelength/n_outer"
-        #     @param d: thickness of the layer in meters
-        #     @param n_outer: refractive index of the outer medium
-        #     @param n_layer: refractive index of the inner medium
-        #     @param n_substrate: refractive index of the outer medium. Must be the same as the n_outer
-        #     @param theta_outer: angle of incidence, i.e. angle to the normal in the outer medium. Can be in the range -pi/2<theta_outer<pi/2
-        #     """
-        #
-        #     # Angles in layer and substrate
-        #     def calc_cos_theta_i(n_i):
-        #         # Snell's law
-        #         sin_theta_i = n_outer * np.sin(theta_outer) / n_i
-        #         # Note: Cosine can be complex
-        #         cos_theta_i = np.emath.sqrt(1 - sin_theta_i ** 2)
-        #         return cos_theta_i
-        #
-        #     cos_theta_outer = np.cos(theta_outer)
-        #     cos_theta_layer = calc_cos_theta_i(n_layer)
-        #     cos_theta_substrate = calc_cos_theta_i(n_substrate)
-        #
-        #     # Fresnel coefficents for s polarisation (TE polarisation)
-        #     def r_ij_s(n_i, cos_theta_i, n_j, cos_theta_j):
-        #         return (n_i * cos_theta_i - n_j * cos_theta_j) / (n_i * cos_theta_i + n_j * cos_theta_j)
-        #
-        #     def t_ij_s(n_i, cos_theta_i, n_j, cos_theta_j):
-        #         return 2 * n_i * cos_theta_i / (n_i * cos_theta_i + n_j * cos_theta_j)
-        #
-        #     r_12_s: np.complex_ = r_ij_s(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
-        #     t_12_s: np.complex_ = t_ij_s(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
-        #
-        #     r_23_s: np.complex_ = r_ij_s(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
-        #     t_23_s: np.complex_ = t_ij_s(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
-        #
-        #     self.assertEqual(n_outer, n_substrate)
-        #     self.assertAlmostEqual(r_12_s.real, -r_23_s.real, delta=1e-4, msg='Refractive index of the outer medium and the substrate must be the same.')
-        #     self.assertAlmostEqual(r_12_s.imag, -r_23_s.imag, delta=1e-4, msg='Refractive index of the outer medium and the substrate must be the same.')
-        #
-        #     # Fresnel coefficients for p polarisation (TM polarisation)
-        #     def r_ij_p(n_i, cos_theta_i, n_j, cos_theta_j):
-        #         return (n_j * cos_theta_i - n_i * cos_theta_j) / (n_j * cos_theta_i + n_i * cos_theta_j)
-        #
-        #     def t_ij_p(n_i, cos_theta_i, n_j, cos_theta_j):
-        #         return 2 * n_i * cos_theta_i / (n_j * cos_theta_i + n_i * cos_theta_j)
-        #
-        #     r_12_p: np.complex_ = r_ij_p(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
-        #     t_12_p: np.complex_ = t_ij_p(n_outer, cos_theta_outer, n_layer, cos_theta_layer)
-        #
-        #     r_23_p: np.complex_ = r_ij_p(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
-        #     t_23_p: np.complex_ = t_ij_p(n_layer, cos_theta_layer, n_substrate, cos_theta_substrate)
-        #
-        #     self.assertEqual(n_outer, n_substrate)
-        #     self.assertAlmostEqual(r_12_p.real, -r_23_p.real, delta=1e-4, msg='Refractive index of the outer medium and the substrate must be the same.')
-        #     self.assertAlmostEqual(r_12_p.imag, -r_23_p.imag, delta=1e-4, msg='Refractive index of the outer medium and the substrate must be the same.')
-        #
-        #
-        #     phi = 2 * np.pi / wavelength * n_layer * d * cos_theta_layer / n_outer
-        #
-        #     def amplitude(r, phi):
-        #         return r * (1-np.exp(2 * 1j * phi)) / (1 - r ** 2 * np.exp(2 * 1j * phi))
-        #
-        #     r_s = r_12_s
-        #     amplitude_s = amplitude(r_s, phi)
-        #
-        #     r_p = r_12_p
-        #     amplitude_p = amplitude(r_p, phi)
-        #
-        #     return amplitude_s, amplitude_p
-        #     # return np.abs(amplitude_s) ** 2, np.abs(amplitude_p) ** 2
-        #     # return 4 * (r ** 2) * (np.sin(phi) ** 2) / ((1 - r ** 2) ** 2 + 4 * (r ** 2) * (phi ** 2))
 
         M: int = 1
-        # d: np.float_ = np.float_(1 * 1e-3)
-        # n_outer: np.float_ = np.float_(1.00)
-        # n_layer: np.float_ = np.float_(1.50)
-        # n: np.ndarray = np.array([n_layer])
-        # n_substrate = n_outer
-        # theta_outer: np.float_ = np.float_(0.)
 
         for wavelength in np.linspace(200, 3000, num=10) * 1e-9:
             for d in np.linspace(1, 1e3, num=10) * 1e-9:
@@ -342,7 +250,6 @@ class Test_reflectivity(TestCase):
                                     f'b_0_correct: {b_0_correct, np.abs(b_0_correct) ** 2}, b_0_to_be_tested: {b_0_to_be_tested, np.abs(b_0_to_be_tested) ** 2}'
                                 self.assertAlmostEqual(b_0_correct.real, b_0_to_be_tested.real, delta=1e-11, msg=err_msg)
                                 self.assertAlmostEqual(b_0_correct.imag, b_0_correct.imag, delta=1e-11, msg=err_msg)
-            # np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=1e-15)
 
         # fig: plt.Figure
         # ax: plt.Axes
@@ -444,36 +351,3 @@ class Test_reflectivity(TestCase):
         # ax.legend()
         # # ax.set_ylim(0, 1.2)
         # plt.show()
-
-
-    # def test_against_plot_1_from_paper_for_antireflection_coating(self):
-    #     df = pd.read_csv('./data/digitised_plots_from_Hobson_Baldwin_2004_paper/plot_1_data.csv')
-    #
-    #     wavelengths: np.ndarray = df.iloc[:,0].values * 1e-9
-    #     R_paper: np.ndarray = df.iloc[:,1].values
-    #
-    #     p = wavelengths.argsort()
-    #     wavelengths = wavelengths[p]
-    #     R_paper = R_paper[p]
-    #
-    #
-    #
-    #     # fig, ax = plt.subplots()
-    #     # ax: plt.Axes
-    #     # ax.plot(wavelengths, R)
-    #     # plt.show()
-
-    # def test_against_plot_2_from_paper_for_dichroic(self):
-    #     df = pd.read_csv('./data/digitised_plots_from_Hobson_Baldwin_2004_paper/plot_2_data.csv')
-    #
-    #     wavelengths: np.ndarray = df.iloc[:,0].values
-    #     R: np.ndarray = df.iloc[:,1].values
-    #
-    #     p = wavelengths.argsort()
-    #     wavelengths = wavelengths[p]
-    #     R = R[p]
-    #
-    #     fig, ax = plt.subplots()
-    #     ax: plt.Axes
-    #     ax.plot(wavelengths, R)
-    #     plt.show()
