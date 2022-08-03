@@ -62,12 +62,12 @@ def _make_matrix(polarisation: int, M: np.int_, n: npt.NDArray[np.float_], d: np
     """
     # assert len(n) == M and len(d) == M
 
-    def calc_cos_theta(n: Union[np.float_, npt.NDArray[np.float_]]) -> Union[np.complex_, npt.NDArray[np.complex_]]:
-        return np.sqrt(np.complex_(1 - (n_outer / n) ** 2 * np.sin(theta_outer) ** 2))
+    all_n = np.concatenate([np.array([n_outer]), n, np.array([n_substrate])])
+    all_cos_theta = np.sqrt(np.complex_(1 - (n_outer / all_n) ** 2 * np.sin(theta_outer) ** 2))
 
-    cos_theta_outer: np.complex_ = np.complex_(np.cos(theta_outer))
-    cos_theta: npt.NDArray[np.complex_] = calc_cos_theta(n)
-    cos_theta_substrate: np.complex_ = calc_cos_theta(n_substrate)
+    cos_theta_outer: np.complex_ = all_cos_theta[0]
+    cos_theta: npt.NDArray[np.complex_] = all_cos_theta[1:M+1]
+    cos_theta_substrate: np.complex_ = all_cos_theta[M+1]
 
     exps: npt.NDArray[np.complex_] = np.exp(1j * (k_outer * d) * (n / n_outer) * cos_theta)
 
