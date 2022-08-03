@@ -6,7 +6,7 @@ import numpy.typing as npt
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from src.main import reflectivity, amplitude, _make_matrix
+from src.reflectivity import reflectivity, amplitude, _make_matrix
 
 
 class Test_reflectivity(TestCase):

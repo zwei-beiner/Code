@@ -162,11 +162,3 @@ def _make_vector(M: np.int_) -> npt.NDArray[np.complex_]:
     c[0] = 1
     c[1] = 1
     return c
-
-
-def main():
-    return
-
-
-if __name__ == '__main__':
-    main()

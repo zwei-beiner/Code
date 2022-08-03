@@ -4,7 +4,7 @@ import time
 import scipy.stats
 import matplotlib.pyplot as plt
 
-from src.main import reflectivity
+from src.reflectivity import reflectivity
 
 def profile():
     rng = np.random.default_rng(0)
