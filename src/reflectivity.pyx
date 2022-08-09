@@ -1,10 +1,7 @@
-# cython: language_level=3, boundscheck=False, wraparound=False, cdivision=True
-# Deactivate bounds checking, Deactivate negative indexing, No division by zero checking
-
 import scipy.linalg
 cimport numpy as np
 import numpy as np
-import cython
+
 
 cdef extern from "<complex.h>" nogil:
     double complex cexp(double complex z)
