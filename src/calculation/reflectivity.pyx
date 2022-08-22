@@ -17,6 +17,43 @@ cdef extern from "<math.h>" nogil:
 cdef double PI = 3.14159265358979323846
 
 
+cpdef np.ndarray [double, ndim=1] reflectivity_automatic_wavelength(int polarisation, int M, np.ndarray[double, ndim=1] n, np.ndarray[double, ndim=1] d, double min_wavelength, double max_wavelength, double n_outer, double n_substrate, double theta_outer):
+    return reflectivity_at_wavelengths(polarisation, M, n, d, calculate_wavelengths(min_wavelength, max_wavelength, d), n_outer, n_substrate, theta_outer)
+
+
+cpdef np.ndarray [double, ndim=1] reflectivity_at_wavelengths(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, np.ndarray [double, ndim=1] wavelengths, double n_outer, double n_substrate, double theta_outer):
+    cdef int number = len(wavelengths)
+
+    cdef np.ndarray [double, ndim=1] reflectivities = np.zeros(n, dtype=float)
+    cdef int i
+    for i in range(number):
+        reflectivities[i] = reflectivity(polarisation, M, n, d, wavelengths[i], n_outer, n_substrate, theta_outer)
+
+    return reflectivities
+
+
+cpdef np.ndarray [double, ndim=1] calculate_wavelengths(double min_wavelength, double max_wavelength, double total_thickness):
+    # cdef double total_thickness = d.sum()
+    cdef double f = 1 / (8 * total_thickness)
+
+    # Calculate number of points
+    cdef double temp = min_wavelength
+    cdef int n = 0
+    while temp < max_wavelength:
+        temp += f * temp ** 2
+        n += 1
+
+    # Store wavelengths
+    cdef np.ndarray [double, ndim=1] wavelengths = np.zeros(n, dtype=float)
+    temp = min_wavelength
+    cdef int i
+    for i in range(n):
+        wavelengths[i] = temp
+        temp += f * temp ** 2
+
+    return wavelengths
+
+
 cpdef double reflectivity(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, double wavelength, double n_outer,
                  double n_substrate, double theta_outer):
     """

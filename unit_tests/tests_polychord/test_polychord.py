@@ -13,14 +13,21 @@ import pypolychord.priors
 import scipy.optimize
 import scipy.stats
 
-from src.optimiser import output_results
+import anesthetic
+import anesthetic.utils
+from anesthetic.gui.plot import RunPlotter
+
+from src.optimiser import output_results, plot
+
 
 class Test_reflectivity(TestCase):
     def test_2d_optimisation(self):
         # Expected optimum: (0, 0)
 
         def loglikelihood(theta):
-            return np.log(1/np.sqrt(2 * np.pi)) - np.sum(theta ** 2)/2, []
+            # Note: Loglikelihood can simply be the likelihood when we are only seeking the maximum.
+            # Test maximisation of negative function.
+            return np.exp(-np.sum(theta ** 2)/2) - 30, []
 
         def prior(unit_cube):
             # Uniform prior
@@ -28,14 +35,22 @@ class Test_reflectivity(TestCase):
 
         nDims = 2
 
-        output_results(loglikelihood, nDims, prior, 1)
+        settings = output_results(loglikelihood, nDims, prior, 10, False)
 
+        samples = anesthetic.NestedSamples(root=str(Path(settings.base_dir) / settings.file_root))
+        np.random.seed(71)
+        print(samples.d())
+        samples._compute_insertion_indexes()
+        ks = anesthetic.utils.insertion_p_value(samples.insertion, settings.nlive)
+        print(ks['p-value'])
+
+        plot(settings)
 
     def test_4d_rosenbrock(self):
         # Expected global optimum: (1,1,1,1)
         # Local optimum: (-1,1,1,1)
 
-        nDims = 2
+        nDims = 4
 
         def loglikelihood(theta):
             rosenbrock = np.sum(100 * (theta[1:] - theta[:nDims-1] ** 2) ** 2 + (1 - theta[:nDims - 1]) ** 2)
@@ -73,7 +88,10 @@ class Test_reflectivity(TestCase):
         def prior(cube):
             return pypolychord.priors.UniformPrior(-5,5)(cube)
 
-        output_results(loglikelihood, nDims, prior, 10)
+        settings = output_results(loglikelihood, nDims, prior, 13, True)
+        plot(settings)
+
+
 
 
     def test_uniorm_discrete_prior(self):

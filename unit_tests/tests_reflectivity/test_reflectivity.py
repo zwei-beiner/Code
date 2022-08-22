@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 
 from src.reflectivity import reflectivity, amplitude, _make_matrix
 
-
 class Test_reflectivity(TestCase):
     # Note: Can't handle zero layers (M=0)
     # def test_fresnel_equations(self):
@@ -186,7 +185,7 @@ class Test_reflectivity(TestCase):
                                                    '\nR_correct:'+str(R_correct)+ \
                                                    '\n R_to_be_tested:'+str(R_to_be_tested)+ \
                                                    '\n Difference:'+str(R_correct - R_to_be_tested)
-                                    np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=1e-15, err_msg=err_msg)
+                                    np.testing.assert_allclose(R_correct, R_to_be_tested, rtol=0, atol=8e-11, err_msg=err_msg)
 
 
     def test_fabry_pelot_etalon(self):
