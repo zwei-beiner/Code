@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Union, Callable
+from types import FunctionType
 
 import numpy as np
 import pypolychord
@@ -89,19 +90,20 @@ class CategoricalConstraint(AbstractConstraint):
 #         else:
 #             raise ValueError(f'Invalid input: {constraint, params}')
 
+RefractiveIndex = Callable[[Union[float, np.ndarray]], Union[float, np.ndarray]]
 
 class n_constraints:
-    def __init__(self, params: tuple[tuple[str, Union[float, list[float]]], ...]):
+    def __init__(self, params: tuple[tuple[str, Union[RefractiveIndex, list[RefractiveIndex]]], ...]):
         self._n: list[AbstractConstraint] = []
         self._fixed_indices: list[int] = []
         self._unfixed_indices: list[int] = []
 
         for i, (constraint, value) in enumerate(params):
             if constraint == 'fixed':
-                self._n.append(FixedConstraint(float, value))
+                self._n.append(FixedConstraint(FunctionType, value))
                 self._fixed_indices.append(i)
             elif constraint == 'categorical':
-                self._n.append(CategoricalConstraint(float, value))
+                self._n.append(CategoricalConstraint(FunctionType, value))
                 self._unfixed_indices.append(i)
             else:
                 raise ValueError(f'Invalid input: {constraint, value}')
@@ -203,16 +205,46 @@ class Utils:
         res = tuple((constraint, pattern[i % len(pattern)]) for i in range(M))
         return res
 
-    @staticmethod
-    def categorical_sampler(categories: list[float]):
-        categories = np.array(categories)
 
-        def prior(x):
+    @staticmethod
+    def constant(val: float):
+        def n(wavelength: float) -> float:
+            return val
+        return n
+
+
+    @staticmethod
+    def sellmeier_equation(Bs: list[float], Cs: list[float]):
+        Bs = np.array(Bs)
+        Cs = np.array(Cs)
+
+        def n(wavelength: float) -> float:
+            wavelength_squared = wavelength ** 2
+            return np.sqrt(1 + np.sum(Bs * wavelength_squared / (wavelength_squared - Cs)))
+
+        return n
+
+
+    @staticmethod
+    def categorical_sampler(categories: list):
+        """
+        Creates function which maps the continuous random variable Uniform([0, 1]) to a discrete uniform random variable
+        over {0, 1, ..., len(categories) - 1}.
+        """
+
+        def prior(x: float) -> float:
+            # x=0 has to be handled separately.
+            # (See https://stackoverflow.com/questions/25688461/ppf0-of-scipys-randint0-2-is-1-0)
+            if x == 0.0:
+                return 0.
             rv = scipy.stats.randint(low=0, high=len(categories))
+            # If x is not in [0, 1] (interval includes endpoints), returns np.nan.
+            # np.nan is not handled here because it is assumed that the input is in the range [0, 1].
             index = rv.ppf(x)
-            return categories[np.int_(index)]
+            return np.int_(index)
 
         return prior
+
 
     @staticmethod
     def uniform_sampler(min: float, max: float):
@@ -225,11 +257,11 @@ class Utils:
 class Optimiser:
     def __init__(self, project_name: str,
                  M: int,
-                 n_outer: float,
-                 n_substrate: float,
+                 n_outer: RefractiveIndex,
+                 n_substrate: RefractiveIndex,
                  theta_outer: float,
                  wavelengths: Union[np.ndarray, tuple[float, float]],
-                 n_specification: tuple[tuple[str, Union[float, list[float]]], ...],
+                 n_specification: tuple[tuple[str, Union[RefractiveIndex, list[RefractiveIndex]]], ...],
                  d_specification: tuple[tuple[str, Union[float, tuple[float, float]]], ...],
                  p_pol_weighting: float,
                  s_pol_weighting: float,
@@ -288,20 +320,20 @@ class Optimiser:
         split = len(self._n_constraints.get_unfixed_indices())
         nDims = split + len(self._d_constraints.get_unfixed_indices())
 
-        # params is an array of length 2M-nFixed where nFixed is the total number of total parameters.
+        # params is an array of length 2M-nFixed where nFixed is the total number of fixed parameters.
         def amplitude_wrapper(params: np.ndarray, wavelength: float, polarisation: int):
             n = np.zeros(self._M)
-            n[self._n_constraints.get_fixed_indices()] = self._n_constraints.get_fixed_values()
-            n[self._n_constraints.get_unfixed_indices()] = params[:split]
+            n[self._n_constraints.get_fixed_indices()] = [n(wavelength) for n in self._n_constraints.get_fixed_values()]
+            n[self._n_constraints.get_unfixed_indices()] = [ns[np.int_(params[:split][i])](wavelength) for i, ns in enumerate(self._n_constraints.get_unfixed_values())]
 
             d = np.zeros(self._M)
             d[self._d_constraints.get_fixed_indices()] = self._d_constraints.get_fixed_values()
             d[self._d_constraints.get_unfixed_indices()] = params[split:]
 
-            return amplitude(polarisation, self._M, n, d, wavelength, self._n_outer, self._n_substrate,
+            return amplitude(polarisation, self._M, n, d, wavelength, self._n_outer(wavelength), self._n_substrate(wavelength),
                              self._theta_outer)
 
-        n_unfixed_values: list[list[float]] = self._n_constraints.get_unfixed_values()
+        n_unfixed_values: list[list[RefractiveIndex]] = self._n_constraints.get_unfixed_values()
         d_unfixed_values: list[tuple[float]] = self._d_constraints.get_unfixed_values()
         samplers = [Utils.categorical_sampler(n_unfixed_values[i]) for i in range(0, split)] + [
             Utils.uniform_sampler(*d_unfixed_values[i]) for i in range(0, nDims - split)]
