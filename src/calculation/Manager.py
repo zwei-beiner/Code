@@ -3,9 +3,13 @@ from pathlib import Path
 from typing import Union, Callable
 from types import FunctionType
 
+import anesthetic
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import pypolychord
 import scipy.stats
+import scipy.optimize
 
 from pypolychord.priors import UniformPrior
 
@@ -191,8 +195,16 @@ class Wavelength_constraint:
         else:
             raise ValueError(f'Invalid type: {type(self._wavelengths)}')
 
-    def get_values(self) -> Union[np.ndarray, tuple[float]]:
+    def get_values(self) -> Union[np.ndarray, tuple[float, float]]:
         return self._wavelengths.value
+
+    def get_min_max(self) -> tuple[float, float]:
+        if self.is_fixed():
+            array = self.get_values()
+            return np.amin(array), np.amax(array)
+        else:
+            return self.get_values()
+
 
 
 # class n_constraints:
@@ -220,7 +232,7 @@ class Optimiser:
                  weight_function_p: Callable[[np.ndarray], np.ndarray] = lambda x: np.ones(len(x)),
                  weight_function_phase: Callable[[np.ndarray], np.ndarray] = lambda x: np.ones(len(x))):
 
-        self._project_name = project_name
+        self._root: Path = Path.cwd() / project_name
 
         # Default values
         # self.set_constraint_M('bounded', (1, 200))
@@ -247,6 +259,10 @@ class Optimiser:
         self._weight_function_p = weight_function_p
         self._weight_function_phase = weight_function_phase
 
+        # Number of parameters to be optimised
+        self._nDims = len(self._n_constraints.get_unfixed_indices()) + len(self._d_constraints.get_unfixed_indices())
+        # Index which is used to split parameter array between n (index < split) and d (index > split)
+        self._split = len(self._n_constraints.get_unfixed_indices())
 
     # def set_constraint_M(self, M: int):
     #     if not(type(M) is int):
@@ -352,31 +368,222 @@ class Optimiser:
         return likelihood, prior
 
 
-    def run(self):
+    def run_global_optimisation(self):
         likelihood, prior = self._build_likelihood_and_prior()
-        nDims = len(self._n_constraints.get_unfixed_indices()) + len(self._d_constraints.get_unfixed_indices())
         nDerived = 0
         niter = 10
 
-        settings = pypolychord.settings.PolyChordSettings(nDims, nDerived)
+        settings = pypolychord.settings.PolyChordSettings(self._nDims, nDerived)
         settings.nlive = 10 * settings.nlive
-        settings.read_resume = False  # TODO: Check if directory exists
-        settings.maximise = True
-        settings.max_ndead = int(niter * nDims * settings.nlive)  # TODO: Check if likelihood converged
+        settings.read_resume = True if (self._root / 'polychord_output').is_dir() else False
+        # settings.maximise = True
+        settings.max_ndead = int(niter * self._nDims * settings.nlive)  # TODO: Check if likelihood converged
         settings.precision_criterion = -1
         settings.feedback = 3
-        settings.base_dir = str(Path(__file__).parent / 'polychord_output')
+        settings.base_dir = str(self._root / 'polychord_output')
 
-        output = pypolychord.run_polychord(likelihood, nDims, nDerived, settings, prior)
+        output = pypolychord.run_polychord(likelihood, self._nDims, nDerived, settings, prior)
         print('PolyChord run completed.')
 
-        with open(Path(settings.base_dir) / (settings.file_root + '.maximum'), 'r') as file:
-            lines = file.readlines()
+        # with open(Path(settings.base_dir) / (settings.file_root + '.maximum'), 'r') as file:
+        #     lines = file.readlines()
+        #
+        # params = lines[3].split()
+        #
+        # with open(str(Path(__file__).parent / 'optimal_parameters.txt'), 'w') as file:
+        #     file.write('\n'.join(map(str, params)))
 
-        params = lines[3].split()
 
-        with open(str(Path(__file__).parent / 'optimal_parameters.txt'), 'w') as file:
-            file.write('\n'.join(map(str, params)))
+    def run_local_optimisation(self):
+        dataframe = anesthetic.NestedSamples(root=str(self._root / 'polychord_output/test'))
+
+        max_id = dataframe['logL'].idxmax()[0]
+        # print(max_id)
+        max_row = dataframe.iloc[[max_id]]
+        # print(max_row)
+        params = max_row.loc[:, 0:(self._nDims - 1)].values.flatten()
+
+        merit_function, _ = self._build_merit_function_and_prior()
+
+        bounds = [(0, (len(val) - 1) + 0.9) for val in self._n_constraints.get_unfixed_values()] + self._d_constraints.get_unfixed_values()
+        def wrapped_merit_function(params: np.ndarray) -> float:
+            split = len(self._n_constraints.get_unfixed_indices())
+            params[:split] = np.floor(params[:split])
+            return merit_function(params)
+        res: scipy.optimize.OptimizeResult = scipy.optimize.minimize(wrapped_merit_function, params, method='Nelder-Mead', bounds=bounds)
+        optimal_params = res.x
+        optimal_chi_squared = res.fun
+        # print(res.x, res.fun)
+
+
+        # Write to file
+        n = np.zeros(self._M)
+        n[self._n_constraints.get_fixed_indices()] = 0
+        n[self._n_constraints.get_unfixed_indices()] = np.int_(optimal_params[:self._split])
+
+        d = np.zeros(self._M)
+        d[self._d_constraints.get_fixed_indices()] = self._d_constraints.get_fixed_values()
+        d[self._d_constraints.get_unfixed_indices()] = optimal_params[self._split:]
+
+        df = pd.DataFrame({'Layer': np.arange(1, self._M + 1), 'n': n, 'd(nm)': d * 1e9})
+        df.to_csv(self._root / 'optimal_parameters.csv', index=False)
+
+        with open(self._root / 'optimal_chi_squared.txt', 'w') as f:
+            f.write(str(optimal_chi_squared))
+
+
+    def plot_merit_function(self, show_plot: bool) -> tuple[plt.Figure, plt.Axes]:
+        """
+        Plot how the merit function decreases during a PolyChord run.
+        More precisely, the merit function value of each dead point is plotted, which is the largest merit function
+        value of the samples at a given PolyChord iteration.
+
+        The plot should show a decreasing function which flattens out.
+        """
+
+        dataframe = anesthetic.NestedSamples(root=str(self._root / 'polychord_output/test'))
+
+        merit_function_values = -dataframe['logL'].values
+        x = np.arange(len(merit_function_values))
+
+        fig: plt.Figure
+        ax: plt.Axes
+        fig, ax = plt.subplots(figsize=(9, 6))
+        ax.plot(x, merit_function_values)
+        lower_x_lim, upper_x_lim = ax.get_xlim()
+        point_1 = 0, merit_function_values[0]
+        point_2 = len(merit_function_values) - 1, merit_function_values[len(merit_function_values) - 1]
+        ax.annotate(f'$f={round(point_1[1], 2)}$', xy=point_1, xycoords='data',
+                    xytext=(point_1[0] + 0.05 * (upper_x_lim - lower_x_lim), point_1[1]), textcoords='data',
+                    arrowprops={'width': 1, 'headwidth': 4, 'headlength': 8, 'facecolor': 'grey'},
+                    horizontalalignment='left', verticalalignment='center',
+                    )
+        ax.annotate(f'$f={round(point_2[1], 2)}$', xy=point_2, xycoords='data',
+                    xytext=(point_2[0], point_2[1] + 0.1 * (ax.get_ylim()[1] - ax.get_ylim()[0])), textcoords='data',
+                    arrowprops={'width': 1, 'headwidth': 4, 'headlength': 8, 'facecolor': 'grey'},
+                    horizontalalignment='right', verticalalignment='bottom',
+                    )
+        ax.set_title('Merit function $f$ against PolyChord iteration')
+        ax.set_ylabel('Merit function $f$')
+        ax.set_xlabel('PolyChord iteration (Number of dead points $n_\mathrm{dead}$)')
+
+        if show_plot:
+            plt.show()
+
+        return fig, ax
+
+
+    def plot_reflectivity(self, show_plot: bool) -> tuple[plt.Figure, list[plt.Axes, plt.Axes]]:
+        df = pd.read_csv(self._root / 'optimal_parameters.csv')
+        optimal_params = np.zeros(self._nDims)
+        optimal_params[:self._split] = (df['n'].values)[self._n_constraints.get_unfixed_indices()]
+        optimal_params[self._split:] = (df['d(nm)'].values * 1e-9)[self._d_constraints.get_unfixed_indices()]
+        print(optimal_params)
+
+        wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=1000)
+        amplitude, _ = self._build_amplitude_function()
+
+        def reflectivity(polarisation: int):
+            return np.array([np.abs(amplitude(optimal_params, wavelength, polarisation)) ** 2 for wavelength in wavelengths])
+
+        reflectivity_s, reflectivity_p = reflectivity(0), reflectivity(1)
+
+        fig: plt.Figure
+        ax_s: plt.Axes
+        ax_p: plt.Axes
+        fig, (ax_s, ax_p) = plt.subplots(2, 1, figsize=(9, 6))
+        ax_s.plot(wavelengths * 1e9, self._target_reflectivity_s(wavelengths), label='Target reflectivity')
+        ax_s.plot(wavelengths * 1e9, reflectivity_s, label='Optimal reflectivity')
+        ax_s.set_ylabel('$R_\mathrm{s}$')
+        ax_s.set_title('Reflectivity against wavelength (s-polarisation)')
+
+        ax_p.plot(wavelengths * 1e9, self._target_reflectivity_p(wavelengths), label='Target reflectivity')
+        ax_p.plot(wavelengths * 1e9, reflectivity_p, label='Optimal reflectivity')
+        ax_p.set_ylabel('$R_\mathrm{p}$')
+        ax_p.set_title('Reflectivity against wavelength (p-polarisation)')
+
+        for ax in [ax_s, ax_p]:
+            ax.set_xlabel('Wavelength $\lambda$ [nm]')
+            ax.set_xlim(np.amin(wavelengths) * 1e9, np.amax(wavelengths) * 1e9)
+            ax.legend()
+
+        fig.tight_layout()
+        fig.subplots_adjust(hspace=0.6)
+
+        if show_plot:
+            plt.show()
+
+        return fig, [ax_s, ax_p]
+
+
+    def plot_marginal_distributions(self, show_plot: bool) -> tuple[plt.Figure, list[plt.Axes]]:
+        """
+        Plot the distribution of samples generated during the PolyChord run for each parameter.
+        The samples (dead points) are read in and plotted in a grid.
+        In a Bayesian context, this would correspond to the marginal distributions of the posterior distribution.
+
+        @param show_plot: Whether to display the plot in a new matplotlib window. If True, plt.show() is called.
+        """
+
+
+        dataframe = anesthetic.NestedSamples(root=str(self._root / 'polychord_output/test'))
+
+        # Using anesthetic package to plot histograms fails for some reason. Possibly because it is trying to
+        # draw a smooth curve for a discrete distribution (for the refractive indices).
+        # fig, axes = dataframe.plot_1d(list(range(self._nDims)))
+
+        fig: plt.Figure
+        axes: list[plt.Axes]
+        # Number of rows and columns in the subplot grid. There are self._nDim subplots in total. Try to make the grid
+        # square by choosing nrows approximately as the square root self._nDim. Then calculate the number of columns
+        # necessary to fit in all the subplots, accounting for the case where self._nDim is not a square number.
+        nrows = np.int_(np.floor(np.sqrt(self._nDims)))
+        ncols = int(self._nDims // nrows + (1 if self._nDims % nrows != 0 else 0))
+        fig, axes = plt.subplots(nrows, ncols, figsize=(9, 6))
+        # Loop through all the subplots in the Figure object up to self._nDims.
+        for i, ax in enumerate(fig.axes[:self._nDims]):
+            ax: plt.Axes
+            # Display the y-axis ticks in scientific notation, i.e. 1x10^3 instead of 1000, to save horizontal space.
+            ax.ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
+            # Each subplot corresponds to a free parameter which has been optimised. For i < self._split, the parameter
+            # is a refractive index n.
+            if i < self._split:
+                # Set the title as n_{which layer does this refractive index belong to?}.
+                ax.set_title('$n_\mathrm{' + str(self._n_constraints.get_unfixed_indices()[i]) + '}$')
+                # Get the ith column from the data frame, which are the ith parameter values of the dead points and cast
+                # them to integers.
+                data = np.int_(dataframe[i].values)
+                # Plot a histogram.
+                ax.bar(*np.unique(data, return_counts=True))
+                # Show only integers on the x-axis.
+                ax.set_xticks(np.arange(np.amin(data), np.amax(data) + 1))
+            # For i > self._split, the parameter is a thickness d.
+            else:
+                # Set the title as d_{which layer does this thickness belong to?}.
+                ax.set_title('$d_\mathrm{' + str(self._d_constraints.get_unfixed_indices()[i - self._split]) + '}$ [nm]')
+                # Get the ith column from the data frame, which are the ith parameter values of the dead points. Convert
+                # the unit 'meter' to 'nanometers'.
+                data = dataframe[i].values * 1e9
+                # Plot a histogram with the bin widths set automatically because the thickness is a continuous variable.
+                ax.hist(data)
+        fig.suptitle('Histograms of parameter samples after PolyChord run')
+        fig.tight_layout()
+
+        if show_plot:
+            plt.show()
+
+        return fig, axes
+
+        # fig: plt.Figure
+        # axes: pandas.Series[plt.Axes]
+        # fig, axes = dataframe.plot_1d([str(val) for val in range(self._nDims)])
+        # axes: list[plt.Axes] = axes.tolist()
+        # for i, ax in enumerate(axes[:self._split]):
+        #     ax.set_title(f'n of layer {self._n_constraints.get_unfixed_indices()[i]}')
+        # for i, ax in enumerate(axes[self._split:]):
+        #     ax.set_title(f'd of layer {self._d_constraints.get_unfixed_indices()[i]}')
+
+
 
 
 # if __name__ == '__main__':
