@@ -13,6 +13,11 @@ class Utils:
 
 
     @staticmethod
+    def take_layers_out(layer_specification: tuple[tuple], indices: list[int]) -> tuple[tuple]:
+        return tuple(t for i, t in enumerate(layer_specification) if i not in indices)
+
+
+    @staticmethod
     def constant(val: float):
         def n(wavelength: float) -> float:
             return val

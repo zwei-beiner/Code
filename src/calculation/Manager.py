@@ -101,6 +101,7 @@ RefractiveIndex = Callable[[Union[float, np.ndarray]], Union[float, np.ndarray]]
 
 class n_constraints:
     def __init__(self, params: tuple[tuple[str, Union[RefractiveIndex, list[RefractiveIndex]]], ...]):
+        self._specification = params
         self._n: list[AbstractConstraint] = []
         self._fixed_indices: list[int] = []
         self._unfixed_indices: list[int] = []
@@ -133,15 +134,29 @@ class n_constraints:
     def get_unfixed_values(self):
         return list(map(lambda f: f.value, filter(lambda c: type(c) is not FixedConstraint, self._n)))
 
+    def get_values_from_indices(self, indices: list[int]):
+        res: list[RefractiveIndex] = []
+        for n, i in zip(self._n, indices):
+            if type(n) is FixedConstraint:
+                res.append(n.value)
+            elif type(n) is CategoricalConstraint:
+                res.append(n.value[i])
+            else:
+                raise TypeError(f'Invalid type: {type(n)}')
+        return res
+
     def get_fixed_indices(self) -> list[int]:
         return self._fixed_indices
 
     def get_unfixed_indices(self) -> list[int]:
         return self._unfixed_indices
 
+    def get_specification(self):
+        return self._specification
 
 class d_constraints:
     def __init__(self, params: tuple[tuple[str, Union[float, tuple[float]]], ...]):
+        self._specification = params
         self._d: list[AbstractConstraint] = []
         self._fixed_indices: list[int] = []
         self._unfixed_indices: list[int] = []
@@ -178,6 +193,9 @@ class d_constraints:
 
     def get_unfixed_indices(self) -> list[int]:
         return self._unfixed_indices
+
+    def get_specification(self):
+        return self._specification
 
 
 class Wavelength_constraint:
@@ -232,7 +250,9 @@ class Optimiser:
                  weight_function_p: Callable[[np.ndarray], np.ndarray] = lambda x: np.ones(len(x)),
                  weight_function_phase: Callable[[np.ndarray], np.ndarray] = lambda x: np.ones(len(x))):
 
-        self._root: Path = Path.cwd() / project_name
+
+        self._project_name = project_name
+        self._root: Path = Path.cwd() / self._project_name / f'{M}_layers'
 
         # Default values
         # self.set_constraint_M('bounded', (1, 200))
@@ -263,6 +283,11 @@ class Optimiser:
         self._nDims = len(self._n_constraints.get_unfixed_indices()) + len(self._d_constraints.get_unfixed_indices())
         # Index which is used to split parameter array between n (index < split) and d (index > split)
         self._split = len(self._n_constraints.get_unfixed_indices())
+
+
+    @property
+    def M(self):
+        return self._M
 
     # def set_constraint_M(self, M: int):
     #     if not(type(M) is int):
@@ -371,18 +396,19 @@ class Optimiser:
     def run_global_optimisation(self):
         likelihood, prior = self._build_likelihood_and_prior()
         nDerived = 0
-        niter = 10
+        niter = 5
 
         settings = pypolychord.settings.PolyChordSettings(self._nDims, nDerived)
         settings.nlive = 10 * settings.nlive
         settings.read_resume = True if (self._root / 'polychord_output').is_dir() else False
         # settings.maximise = True
         settings.max_ndead = int(niter * self._nDims * settings.nlive)  # TODO: Check if likelihood converged
+        print(f'Maximum number of dead points: {settings.max_ndead}')
         settings.precision_criterion = -1
         settings.feedback = 3
         settings.base_dir = str(self._root / 'polychord_output')
 
-        output = pypolychord.run_polychord(likelihood, self._nDims, nDerived, settings, prior)
+        pypolychord.run_polychord(likelihood, self._nDims, nDerived, settings, prior)
         print('PolyChord run completed.')
 
         # with open(Path(settings.base_dir) / (settings.file_root + '.maximum'), 'r') as file:
@@ -392,6 +418,75 @@ class Optimiser:
         #
         # with open(str(Path(__file__).parent / 'optimal_parameters.txt'), 'w') as file:
         #     file.write('\n'.join(map(str, params)))
+
+    def calculate_critical_thicknesses(self, optimal_n: list[RefractiveIndex]):
+        wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=100)
+        d_crit = np.zeros((self._M, len(wavelengths)))
+        for i in range(self._M):
+            for j in range(len(wavelengths)):
+                n_outer = self._n_outer(wavelengths[j])
+                n = (optimal_n[i])(wavelengths[j])
+                cos_theta = np.sqrt(np.complex_(1 - (n_outer / n) ** 2 * np.sin(self._theta_outer) ** 2))
+                k_x = 2 * np.pi/wavelengths[j] * (n / n_outer) * cos_theta
+                d_crit[i, j] = np.abs(1 / k_x)
+        return 0.01 * d_crit
+
+
+    def which_layers_can_be_taken_out(self, optimal_n: list[RefractiveIndex], optimal_d: np.ndarray) -> list[int]:
+        # Layer can be taken out for which d < d_crit for all wavelengths.
+        d_crit = self.calculate_critical_thicknesses(optimal_n)
+        d_crit_max = np.amax(d_crit, axis=1)
+        return np.argwhere(optimal_d < d_crit_max).flatten().tolist()
+
+
+    def rerun(self) -> bool:
+        """
+        Returns True if optimisation should be rerun with fewer layers.
+        """
+        df = pd.read_csv(self._root / 'optimal_parameters.csv')
+        optimal_n: list[RefractiveIndex] = self._n_constraints.get_values_from_indices(np.int_(df['n'].values).tolist())
+        optimal_d: np.ndarray = df['d(nm)'].values * 1e-9
+
+        indices = self.which_layers_can_be_taken_out(optimal_n, optimal_d)
+        # Return true if layers should be removed and the new number of layers is at least 1.
+        return len(indices) != 0 and (self._M - len(indices)) >= 1
+
+
+    def plot_critical_thicknesses(self, show_plot: bool, save_plot: bool) -> tuple[plt.Figure, list[plt.Axes]]:
+        df = pd.read_csv(self._root / 'optimal_parameters.csv')
+        n: list[RefractiveIndex] = self._n_constraints.get_values_from_indices(np.int_(df['n'].values).tolist())
+        d_crit = self.calculate_critical_thicknesses(n)
+        d: np.ndarray = df['d(nm)'].values * 1e-9
+
+        fig: plt.Figure
+        nrows = np.int_(np.floor(np.sqrt(self._M)))
+        ncols = int(self._M // nrows + (1 if self._M % nrows != 0 else 0))
+        fig, axes = plt.subplots(nrows, ncols, figsize=(9, 6))
+        for i, ax in enumerate(fig.axes):
+            if i < self._M:
+                ax: plt.Axes
+                d_crit_wavelengths = d_crit[i, :]
+                wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=len(d_crit_wavelengths))
+                ax.plot(wavelengths * 1e9, d_crit_wavelengths * 1e9, label='$d_\mathrm{critical}$')
+                ax.plot(wavelengths * 1e9, np.full(len(wavelengths), d[i]) * 1e9, label='$d_\mathrm{optimal}$')
+                ax.set_title(f'Layer {(i + 1)}')
+                ax.set_xlabel('Wavelength $\lambda$ [nm]')
+                ax.set_ylabel('Layer thickness $d$ [nm]')
+            else:
+                ax.axis('off')
+        fig.suptitle('Optimal and critical layer thicknesses against wavelength', fontweight='bold')
+        # Leave space at the top for the figure legend.
+        fig.tight_layout(rect=[0,0,1,0.94])
+        # Set the same legend at the bottom for all subplots.
+        handles, labels = fig.axes[0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc='upper center', ncol=len(labels), bbox_to_anchor=(0.5, 0.94))
+
+        if show_plot:
+            plt.show()
+        if save_plot:
+            fig.savefig(self._root / 'critical_thicknesses.pdf')
+
+        return fig, axes
 
 
     def run_local_optimisation(self):
@@ -412,12 +507,12 @@ class Optimiser:
             return merit_function(params)
         res: scipy.optimize.OptimizeResult = scipy.optimize.minimize(wrapped_merit_function, params, method='Nelder-Mead', bounds=bounds)
         optimal_params = res.x
-        optimal_chi_squared = res.fun
+        optimal_merit_function_value = res.fun
         # print(res.x, res.fun)
 
 
         # Write to file
-        n = np.zeros(self._M)
+        n = np.zeros(self._M, dtype=np.int_)
         n[self._n_constraints.get_fixed_indices()] = 0
         n[self._n_constraints.get_unfixed_indices()] = np.int_(optimal_params[:self._split])
 
@@ -425,14 +520,18 @@ class Optimiser:
         d[self._d_constraints.get_fixed_indices()] = self._d_constraints.get_fixed_values()
         d[self._d_constraints.get_unfixed_indices()] = optimal_params[self._split:]
 
-        df = pd.DataFrame({'Layer': np.arange(1, self._M + 1), 'n': n, 'd(nm)': d * 1e9})
+        optimal_n: list[RefractiveIndex] = self._n_constraints.get_values_from_indices(n.tolist())
+        indices = self.which_layers_can_be_taken_out(optimal_n, d.tolist())
+        true_or_false: list[bool] = [(i in indices) for i in range(self._M)]
+
+        df = pd.DataFrame({'Layer': np.arange(1, self._M + 1), 'n': n, 'd(nm)': d * 1e9, 'Remove': true_or_false})
         df.to_csv(self._root / 'optimal_parameters.csv', index=False)
 
-        with open(self._root / 'optimal_chi_squared.txt', 'w') as f:
-            f.write(str(optimal_chi_squared))
+        with open(self._root / 'optimal_merit_function_value.txt', 'w') as f:
+            f.write(str(optimal_merit_function_value))
 
 
-    def plot_merit_function(self, show_plot: bool) -> tuple[plt.Figure, plt.Axes]:
+    def plot_merit_function(self, show_plot: bool, save_plot: bool) -> tuple[plt.Figure, plt.Axes]:
         """
         Plot how the merit function decreases during a PolyChord run.
         More precisely, the merit function value of each dead point is plotted, which is the largest merit function
@@ -463,17 +562,20 @@ class Optimiser:
                     arrowprops={'width': 1, 'headwidth': 4, 'headlength': 8, 'facecolor': 'grey'},
                     horizontalalignment='right', verticalalignment='bottom',
                     )
-        ax.set_title('Merit function $f$ against PolyChord iteration')
+        ax.set_title('Merit function $f$ against PolyChord iteration', fontweight='bold')
         ax.set_ylabel('Merit function $f$')
         ax.set_xlabel('PolyChord iteration (Number of dead points $n_\mathrm{dead}$)')
+        fig.tight_layout()
 
         if show_plot:
             plt.show()
+        if save_plot:
+            fig.savefig(self._root / 'merit_function_plot.pdf')
 
         return fig, ax
 
 
-    def plot_reflectivity(self, show_plot: bool) -> tuple[plt.Figure, list[plt.Axes, plt.Axes]]:
+    def plot_reflectivity(self, show_plot: bool, save_plot: bool) -> tuple[plt.Figure, list[plt.Axes]]:
         df = pd.read_csv(self._root / 'optimal_parameters.csv')
         optimal_params = np.zeros(self._nDims)
         optimal_params[:self._split] = (df['n'].values)[self._n_constraints.get_unfixed_indices()]
@@ -495,12 +597,12 @@ class Optimiser:
         ax_s.plot(wavelengths * 1e9, self._target_reflectivity_s(wavelengths), label='Target reflectivity')
         ax_s.plot(wavelengths * 1e9, reflectivity_s, label='Optimal reflectivity')
         ax_s.set_ylabel('$R_\mathrm{s}$')
-        ax_s.set_title('Reflectivity against wavelength (s-polarisation)')
+        ax_s.set_title('Reflectivity against wavelength (s-polarisation)', fontweight='bold')
 
         ax_p.plot(wavelengths * 1e9, self._target_reflectivity_p(wavelengths), label='Target reflectivity')
         ax_p.plot(wavelengths * 1e9, reflectivity_p, label='Optimal reflectivity')
         ax_p.set_ylabel('$R_\mathrm{p}$')
-        ax_p.set_title('Reflectivity against wavelength (p-polarisation)')
+        ax_p.set_title('Reflectivity against wavelength (p-polarisation)', fontweight='bold')
 
         for ax in [ax_s, ax_p]:
             ax.set_xlabel('Wavelength $\lambda$ [nm]')
@@ -512,11 +614,13 @@ class Optimiser:
 
         if show_plot:
             plt.show()
+        if save_plot:
+            fig.savefig(self._root / 'reflectivity_plot.pdf')
 
         return fig, [ax_s, ax_p]
 
 
-    def plot_marginal_distributions(self, show_plot: bool) -> tuple[plt.Figure, list[plt.Axes]]:
+    def plot_marginal_distributions(self, show_plot: bool, save_plot: bool) -> tuple[plt.Figure, list[plt.Axes]]:
         """
         Plot the distribution of samples generated during the PolyChord run for each parameter.
         The samples (dead points) are read in and plotted in a grid.
@@ -540,8 +644,8 @@ class Optimiser:
         nrows = np.int_(np.floor(np.sqrt(self._nDims)))
         ncols = int(self._nDims // nrows + (1 if self._nDims % nrows != 0 else 0))
         fig, axes = plt.subplots(nrows, ncols, figsize=(9, 6))
-        # Loop through all the subplots in the Figure object up to self._nDims.
-        for i, ax in enumerate(fig.axes[:self._nDims]):
+        # Loop through all the subplots in the Figure object.
+        for i, ax in enumerate(fig.axes):
             ax: plt.Axes
             # Display the y-axis ticks in scientific notation, i.e. 1x10^3 instead of 1000, to save horizontal space.
             ax.ticklabel_format(style='sci', axis='y', scilimits=(0, 0))
@@ -549,7 +653,7 @@ class Optimiser:
             # is a refractive index n.
             if i < self._split:
                 # Set the title as n_{which layer does this refractive index belong to?}.
-                ax.set_title('$n_\mathrm{' + str(self._n_constraints.get_unfixed_indices()[i]) + '}$')
+                ax.set_xlabel('$n_\mathrm{' + str(self._n_constraints.get_unfixed_indices()[i]) + '}$')
                 # Get the ith column from the data frame, which are the ith parameter values of the dead points and cast
                 # them to integers.
                 data = np.int_(dataframe[i].values)
@@ -558,21 +662,82 @@ class Optimiser:
                 # Show only integers on the x-axis.
                 ax.set_xticks(np.arange(np.amin(data), np.amax(data) + 1))
             # For i > self._split, the parameter is a thickness d.
-            else:
+            elif i < self._nDims:
                 # Set the title as d_{which layer does this thickness belong to?}.
-                ax.set_title('$d_\mathrm{' + str(self._d_constraints.get_unfixed_indices()[i - self._split]) + '}$ [nm]')
+                ax.set_xlabel('$d_\mathrm{' + str(self._d_constraints.get_unfixed_indices()[i - self._split]) + '}$ [nm]')
                 # Get the ith column from the data frame, which are the ith parameter values of the dead points. Convert
                 # the unit 'meter' to 'nanometers'.
                 data = dataframe[i].values * 1e9
                 # Plot a histogram with the bin widths set automatically because the thickness is a continuous variable.
                 ax.hist(data)
-        fig.suptitle('Histograms of parameter samples after PolyChord run')
+            else:
+                # Don't show remaining empty plots.
+                ax.axis('off')
+        fig.suptitle('Histograms of parameter samples after PolyChord run', fontweight='bold')
         fig.tight_layout()
 
         if show_plot:
             plt.show()
+        if save_plot:
+            fig.savefig(self._root / 'marginal_distributions_plot.pdf')
 
         return fig, axes
+
+
+    def make_all_plots(self):
+        self.plot_merit_function(False, True)
+        self.plot_marginal_distributions(False, True)
+        self.plot_reflectivity(False, True)
+        self.plot_critical_thicknesses(False, True)
+
+
+    def get_new_optimiser(self):
+        df = pd.read_csv(self._root / 'optimal_parameters.csv')
+        optimal_n: list[RefractiveIndex] = self._n_constraints.get_values_from_indices(np.int_(df['n'].values).tolist())
+        optimal_d: np.ndarray = df['d(nm)'].values * 1e-9
+
+        indices = self.which_layers_can_be_taken_out(optimal_n, optimal_d)
+        new_n_specification = Utils.take_layers_out(self._n_constraints.get_specification(), indices)
+        new_d_specification = Utils.take_layers_out(self._d_constraints.get_specification(), indices)
+
+        # Return new Optimiser object with M, n_specification and d_specification modified.
+        new_optimiser = Optimiser(project_name=self._project_name,
+                                  M=self._M - len(indices),
+                                  n_outer=self._n_outer,
+                                  n_substrate=self._n_substrate,
+                                  theta_outer=self._theta_outer,
+                                  wavelengths=self._wavelengths.get_values(),
+                                  n_specification=new_n_specification,
+                                  d_specification=new_d_specification,
+                                  p_pol_weighting=self._p_pol_weighting,
+                                  s_pol_weighting=self._s_pol_weighting,
+                                  phase_weighting=self._phase_weighting,
+                                  target_reflectivity_s=self._target_reflectivity_s,
+                                  target_reflectivity_p=self._target_reflectivity_p,
+                                  target_relative_phase=self._target_relative_phase,
+                                  weight_function_s=self._weight_function_s,
+                                  weight_function_p=self._weight_function_p,
+                                  weight_function_phase=self._weight_function_phase)
+        return new_optimiser
+
+
+class Runner:
+    def __init__(self, **kwargs):
+        self._base_root = Path.cwd() / kwargs['project_name']
+        self._optimiser = Optimiser(**kwargs)
+
+    def run(self):
+        while True:
+            print(f'Running with {self._optimiser.M} layers.')
+            if not (self._base_root / f'{self._optimiser.M}_layers' / 'optimal_parameters.csv').exists():
+                # self._optimiser.run_global_optimisation()
+                self._optimiser.run_local_optimisation()
+                self._optimiser.make_all_plots()
+            if self._optimiser.rerun():
+                self._optimiser = self._optimiser.get_new_optimiser()
+            else:
+                break
+
 
         # fig: plt.Figure
         # axes: pandas.Series[plt.Axes]
@@ -628,3 +793,12 @@ class Optimiser:
     #     # return reflectivity2
     #
     # else:
+
+    # fig, ax = plt.subplots(3, 4, figsize=(9, 6))
+    # x = np.linspace(1, 10)
+    # fig.axes[0].plot(x, np.sin(x), label='label 1')
+    # fig.axes[0].plot(x, np.cos(x), label='label 2')
+    # fig.suptitle('Fig title', fontweight='bold')
+    # handles, labels = fig.axes[0].get_legend_handles_labels()
+    # fig.tight_layout(rect=[0, 0, 1, 0.95])
+    # fig.legend(handles, labels, loc='upper center', ncol=len(labels), bbox_to_anchor=(0.5, 0.94))
