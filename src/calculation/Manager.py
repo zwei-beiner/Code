@@ -636,13 +636,15 @@ class Optimiser:
         fig, (ax_s, ax_p) = plt.subplots(2, 1, figsize=(9, 6))
         ax_s.plot(wavelengths * 1e9, self._target_reflectivity_s(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
         ax_s.plot(wavelengths * 1e9, reflectivity_s, label='Optimal reflectivity', color='red', linewidth=0.5)
-        ax_s.fill_between(wavelengths * 1e9, means_s - lower_s, means_s + upper_s, alpha=0.25, color='red', interpolate=True)
+        # Need linewidth=0 as otherwise fill_between leaks colour (See https://github.com/matplotlib/matplotlib/issues/23764).
+        ax_s.fill_between(wavelengths * 1e9, means_s - lower_s, means_s + upper_s, alpha=0.25, color='red', linewidth=0)
         ax_s.set_ylabel('$R_\mathrm{s}$')
         ax_s.set_title('Reflectivity against wavelength (s-polarisation)', fontweight='bold')
 
         ax_p.plot(wavelengths * 1e9, self._target_reflectivity_p(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
         ax_p.plot(wavelengths * 1e9, reflectivity_p, label='Optimal reflectivity', color='red', linewidth=0.5)
-        ax_p.fill_between(wavelengths * 1e9, means_p - lower_p, means_p + upper_p, alpha=0.25, color='red')
+        # Need linewidth=0 as otherwise fill_between leaks colour (See https://github.com/matplotlib/matplotlib/issues/23764).
+        ax_p.fill_between(wavelengths * 1e9, means_p - lower_p, means_p + upper_p, alpha=0.25, color='red', linewidth=0)
         ax_p.set_ylabel('$R_\mathrm{p}$')
         ax_p.set_title('Reflectivity against wavelength (p-polarisation)', fontweight='bold')
 
@@ -771,7 +773,12 @@ class Runner:
     def run(self):
         while True:
             print(f'Running with {self._optimiser.M} layers.')
-            if not (self._base_root / f'{self._optimiser.M}_layers' / 'optimal_parameters.csv').exists():
+
+            files = ['optimal_parameters.csv', 'optimal_merit_function_value.txt', 'merit_function_plot.pdf',
+                     'marginal_distributions_plot.pdf', 'reflectivity_plot.pdf', 'critical_thicknesses_plot.pdf']
+            root: Path = self._base_root / f'{self._optimiser.M}_layers'
+
+            if not all((root / file).exists() for file in files):
                 self._optimiser.run_global_optimisation()
                 self._optimiser.run_local_optimisation()
                 self._optimiser.make_all_plots()
