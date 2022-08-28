@@ -88,15 +88,6 @@ class CategoricalConstraint(AbstractConstraint):
         self._value = value
 
 
-# class M_constraints:
-#     def __init__(self, constraint: str, params):
-#         if constraint == 'fixed':
-#             self.constraint = FixedConstraint(int, params)
-#         elif constraint == 'bounded':
-#             self.constraint = BoundedConstraint(int, params)
-#         else:
-#             raise ValueError(f'Invalid input: {constraint, params}')
-
 RefractiveIndex = Callable[[Union[float, np.ndarray]], Union[float, np.ndarray]]
 
 class n_constraints:
@@ -224,13 +215,6 @@ class Wavelength_constraint:
             return self.get_values()
 
 
-
-# class n_constraints:
-#     constraint_type = ConstraintType2
-#
-#     def __init__(self):
-
-
 class Optimiser:
     def __init__(self, project_name: str,
                  M: int,
@@ -289,20 +273,6 @@ class Optimiser:
     def M(self):
         return self._M
 
-    # def set_constraint_M(self, M: int):
-    #     if not(type(M) is int):
-    #         raise TypeError(f'Incorrect type: {M}')
-    #     self._M = M
-    #     # self._M_constraints = M_constraints(**locals())
-
-    # def set_constraint_n(self, params):
-    #
-    #
-    # def set_constraint_d(self, params):
-    #
-
-    # def set_wavelengths(self, wavelengths: np.ndarray):
-    #     self._wavelengths = Wavelength_constraint(wavelengths)
 
     def _build_amplitude_function(self):
         split = self._split
@@ -419,13 +389,6 @@ class Optimiser:
         pypolychord.run_polychord(likelihood, self._nDims, nDerived, settings, prior)
         print('PolyChord run completed.')
 
-        # with open(Path(settings.base_dir) / (settings.file_root + '.maximum'), 'r') as file:
-        #     lines = file.readlines()
-        #
-        # params = lines[3].split()
-        #
-        # with open(str(Path(__file__).parent / 'optimal_parameters.txt'), 'w') as file:
-        #     file.write('\n'.join(map(str, params)))
 
     def calculate_critical_thicknesses(self, optimal_n: list[RefractiveIndex]):
         wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=100)
@@ -516,8 +479,6 @@ class Optimiser:
         res: scipy.optimize.OptimizeResult = scipy.optimize.minimize(wrapped_merit_function, params, method='Nelder-Mead', bounds=bounds)
         optimal_params = res.x
         optimal_merit_function_value = res.fun
-        # print(res.x, res.fun)
-
 
         # Write to file
         n = np.zeros(self._M, dtype=np.int_)
@@ -786,68 +747,3 @@ class Runner:
                 self._optimiser = self._optimiser.get_new_optimiser()
             else:
                 break
-
-
-        # fig: plt.Figure
-        # axes: pandas.Series[plt.Axes]
-        # fig, axes = dataframe.plot_1d([str(val) for val in range(self._nDims)])
-        # axes: list[plt.Axes] = axes.tolist()
-        # for i, ax in enumerate(axes[:self._split]):
-        #     ax.set_title(f'n of layer {self._n_constraints.get_unfixed_indices()[i]}')
-        # for i, ax in enumerate(axes[self._split:]):
-        #     ax.set_title(f'd of layer {self._d_constraints.get_unfixed_indices()[i]}')
-
-
-
-
-# if __name__ == '__main__':
-    # Optimiser(4, compile=False)
-
-    # c = FixedConstraint(str, 1.9)
-    # print(c.value)
-
-    # # args = [None] * 8
-    # args = {'polarisation': None, 'M': None, 'n': [None] * self._M, 'd': [None] * self._M,
-    #         'n_outer': None, 'n_substrate': None, 'theta_outer': None}
-    #
-    # args['polarisation'] = self._polarisation
-    # args['M'] = self._M
-    # # if self._wavelengths is None:
-    # #     args['wavelengths'] = calculate_wavelengths(600 * 1e-9, 2300 * 1e-9)
-    # # else:
-    # #     args['wavelengths'] = self._wavelengths
-    # args['n_outer'] = self._n_outer
-    # args['n_substrate'] = self._n_substrate
-    # args['theta_outer'] = self._theta_outer
-    #
-    #
-
-    # def reflectivity1(n, d, wavelength):
-    #     return reflectivity(0, M, n, d, wavelength, n_outer, n_substrate, theta_outer)
-
-    # if self._n_constraints.all_fixed() and self._d_constraints.all_fixed():
-    #     raise Exception('All variables are fixed.')
-    #
-    # elif self._n_constraints.all_fixed() and self._d_constraints.all_not_fixed():
-    #     args['n'] = self._n_constraints.to_numpy_array()
-    #     # n = self._n_constraints.to_numpy_array()
-    #     return lambda d, wavelength, M=args['M'], n=args['n'], n_outer=args['n_outer'], n_substrate=args['n_substrate']: \
-    #         reflectivity(M, n, d, wavelength, n_outer, n_substrate)
-
-    # elif self._d_constraints.all_fixed() and self._n_constraints.all_not_fixed():
-    #     args['d'] = self._d_constraints.to_numpy_array()
-    #     # d = self._d_constraints.to_numpy_array()
-    #     # def reflectivity2(n, wavelength):
-    #     #     return reflectivity1(n, d, wavelength)
-    #     # return reflectivity2
-    #
-    # else:
-
-    # fig, ax = plt.subplots(3, 4, figsize=(9, 6))
-    # x = np.linspace(1, 10)
-    # fig.axes[0].plot(x, np.sin(x), label='label 1')
-    # fig.axes[0].plot(x, np.cos(x), label='label 2')
-    # fig.suptitle('Fig title', fontweight='bold')
-    # handles, labels = fig.axes[0].get_legend_handles_labels()
-    # fig.tight_layout(rect=[0, 0, 1, 0.95])
-    # fig.legend(handles, labels, loc='upper center', ncol=len(labels), bbox_to_anchor=(0.5, 0.94))
