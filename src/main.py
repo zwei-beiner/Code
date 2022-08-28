@@ -1,18 +1,9 @@
 from pathlib import Path
 
-from src.calculation.compile import compile_cython_files
+from calculation.compile import compile_cython_files
 
 
 def main():
-    # if compile:
-    #     # Compile Cython .pyx files
-    #     import subprocess
-    #     path = Path(__file__).parent / 'setup.py'
-    #     cmd = f'python {str(path)} build_ext --inplace'
-    #     p = subprocess.run([cmd], shell=True, stdout=subprocess.PIPE,
-    #                        stderr=subprocess.STDOUT, encoding='utf-8')
-    #     print(p.stdout)
-
     compile_cython_files()
 
     import sys
@@ -27,8 +18,7 @@ def main():
 
 
 def run():
-    from src.calculation.Manager import Optimiser
-
+    from src.calculation.Manager import Runner
 
 
 if __name__ == '__main__':
