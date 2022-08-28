@@ -484,7 +484,7 @@ class Optimiser:
         if show_plot:
             plt.show()
         if save_plot:
-            fig.savefig(self._root / 'critical_thicknesses.pdf')
+            fig.savefig(self._root / 'critical_thicknesses_plot.pdf')
 
         return fig, axes
 
@@ -575,6 +575,25 @@ class Optimiser:
         return fig, ax
 
 
+    def _robustness_analysis(self, func: Callable[[np.ndarray], np.ndarray], optimal_d: np.ndarray, num_wavelengths):
+        """
+        @param function: Function which maps array of optimal thicknesses to array of wavelengths
+        @return: Array of mean values, array of lower error bars, array of upper error bars
+        """
+        num_samples = 1000
+        rng = np.random.default_rng()
+        samples = rng.normal(loc=optimal_d, scale=np.full(shape=len(optimal_d), fill_value=1e-9),
+                             size=(num_samples, len(optimal_d)))
+        reflectivities = np.zeros((num_samples, num_wavelengths))
+        for i in range(num_samples):
+            sample = samples[i, :]
+            reflectivities[i, :] = func(sample)
+
+        means = np.mean(reflectivities, axis=0)
+        stds = np.std(reflectivities, axis=0)
+        return means, stds, stds
+
+
     def plot_reflectivity(self, show_plot: bool, save_plot: bool) -> tuple[plt.Figure, list[plt.Axes]]:
         df = pd.read_csv(self._root / 'optimal_parameters.csv')
         optimal_params = np.zeros(self._nDims)
@@ -583,24 +602,40 @@ class Optimiser:
         print(optimal_params)
 
         wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=1000)
-        amplitude, _ = self._build_amplitude_function()
+        amplitude_wrapper, _ = self._build_amplitude_function()
 
-        def reflectivity(polarisation: int):
-            return np.array([np.abs(amplitude(optimal_params, wavelength, polarisation)) ** 2 for wavelength in wavelengths])
+        reflectivity_s = np.array([np.abs(amplitude_wrapper(optimal_params, wavelength, 0)) ** 2 for wavelength in wavelengths])
+        reflectivity_p = np.array([np.abs(amplitude_wrapper(optimal_params, wavelength, 1)) ** 2 for wavelength in wavelengths])
 
-        reflectivity_s, reflectivity_p = reflectivity(0), reflectivity(1)
+        def calculate_robustness_analysis(polarisation: int):
+
+            def amplitude_new(d: np.ndarray, wavelength: float, polarisation):
+                # Calculate the amplitude in the case where all thicknesses are varied.
+                # Construct n from optimal values.
+                n = np.zeros(self._M)
+                n[self._n_constraints.get_fixed_indices()] = [n(wavelength) for n in self._n_constraints.get_fixed_values()]
+                n[self._n_constraints.get_unfixed_indices()] = [ns[np.int_(optimal_params[:self._split][i])](wavelength) for i, ns in
+                                                                enumerate(self._n_constraints.get_unfixed_values())]
+                return amplitude(polarisation, self._M, n, d, wavelength, self._n_outer(wavelength), self._n_substrate(wavelength), self._theta_outer)
+
+            return self._robustness_analysis(lambda d: np.array([np.abs(amplitude_new(d, wavelength, polarisation)) ** 2 for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
+
+        means_s, lower_s, upper_s = calculate_robustness_analysis(0)
+        means_p, lower_p, upper_p = calculate_robustness_analysis(1)
 
         fig: plt.Figure
         ax_s: plt.Axes
         ax_p: plt.Axes
         fig, (ax_s, ax_p) = plt.subplots(2, 1, figsize=(9, 6))
-        ax_s.plot(wavelengths * 1e9, self._target_reflectivity_s(wavelengths), label='Target reflectivity')
-        ax_s.plot(wavelengths * 1e9, reflectivity_s, label='Optimal reflectivity')
+        ax_s.plot(wavelengths * 1e9, self._target_reflectivity_s(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
+        ax_s.plot(wavelengths * 1e9, reflectivity_s, label='Optimal reflectivity', color='red', linewidth=0.5)
+        ax_s.fill_between(wavelengths * 1e9, means_s - lower_s, means_s + upper_s, alpha=0.25, color='red', interpolate=True)
         ax_s.set_ylabel('$R_\mathrm{s}$')
         ax_s.set_title('Reflectivity against wavelength (s-polarisation)', fontweight='bold')
 
-        ax_p.plot(wavelengths * 1e9, self._target_reflectivity_p(wavelengths), label='Target reflectivity')
-        ax_p.plot(wavelengths * 1e9, reflectivity_p, label='Optimal reflectivity')
+        ax_p.plot(wavelengths * 1e9, self._target_reflectivity_p(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
+        ax_p.plot(wavelengths * 1e9, reflectivity_p, label='Optimal reflectivity', color='red', linewidth=0.5)
+        ax_p.fill_between(wavelengths * 1e9, means_p - lower_p, means_p + upper_p, alpha=0.25, color='red')
         ax_p.set_ylabel('$R_\mathrm{p}$')
         ax_p.set_title('Reflectivity against wavelength (p-polarisation)', fontweight='bold')
 
@@ -730,7 +765,7 @@ class Runner:
         while True:
             print(f'Running with {self._optimiser.M} layers.')
             if not (self._base_root / f'{self._optimiser.M}_layers' / 'optimal_parameters.csv').exists():
-                # self._optimiser.run_global_optimisation()
+                self._optimiser.run_global_optimisation()
                 self._optimiser.run_local_optimisation()
                 self._optimiser.make_all_plots()
             if self._optimiser.rerun():
