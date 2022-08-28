@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from Manager import Optimiser
+from Optimiser import Optimiser
 
 
 class Runner:

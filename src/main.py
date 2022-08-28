@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from calculation.compile import compile_cython_files
+from calculation.Compiler import compile_cython_files
 
 
 def main():
@@ -18,7 +18,7 @@ def main():
 
 
 def run():
-    from calculation.Manager import Runner
+    from calculation.Runner import Runner
 
 
 if __name__ == '__main__':
