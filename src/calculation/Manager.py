@@ -305,24 +305,32 @@ class Optimiser:
     #     self._wavelengths = Wavelength_constraint(wavelengths)
 
     def _build_amplitude_function(self):
-        split = len(self._n_constraints.get_unfixed_indices())
-        nDims = split + len(self._d_constraints.get_unfixed_indices())
+        split = self._split
+        nDims = self._nDims
+
+        n_unfixed_values: list[list[RefractiveIndex]] = self._n_constraints.get_unfixed_values()
+        n_fixed_values: list[RefractiveIndex] = self._n_constraints.get_fixed_values()
+        d_unfixed_values: list[tuple[float]] = self._d_constraints.get_unfixed_values()
+        d_fixed_values: list[float] = self._d_constraints.get_fixed_values()
+
+        n_unfixed_indices: list[int] = self._n_constraints.get_unfixed_indices()
+        n_fixed_indices: list[int] = self._n_constraints.get_fixed_indices()
+        d_unfixed_indices: list[int] = self._d_constraints.get_unfixed_indices()
+        d_fixed_indices: list[int] = self._d_constraints.get_fixed_indices()
 
         # params is an array of length 2M-nFixed where nFixed is the total number of fixed parameters.
         def amplitude_wrapper(params: np.ndarray, wavelength: float, polarisation: int):
             n = np.zeros(self._M)
-            n[self._n_constraints.get_fixed_indices()] = [n(wavelength) for n in self._n_constraints.get_fixed_values()]
-            n[self._n_constraints.get_unfixed_indices()] = [ns[np.int_(params[:split][i])](wavelength) for i, ns in enumerate(self._n_constraints.get_unfixed_values())]
+            n[n_fixed_indices] = [n(wavelength) for n in n_fixed_values]
+            n[n_unfixed_indices] = [ns[np.int_(params[:split][i])](wavelength) for i, ns in enumerate(n_unfixed_values)]
 
             d = np.zeros(self._M)
-            d[self._d_constraints.get_fixed_indices()] = self._d_constraints.get_fixed_values()
-            d[self._d_constraints.get_unfixed_indices()] = params[split:]
+            d[d_fixed_indices] = d_fixed_values
+            d[d_unfixed_indices] = params[split:]
 
             return amplitude(polarisation, self._M, n, d, wavelength, self._n_outer(wavelength), self._n_substrate(wavelength),
                              self._theta_outer)
 
-        n_unfixed_values: list[list[RefractiveIndex]] = self._n_constraints.get_unfixed_values()
-        d_unfixed_values: list[tuple[float]] = self._d_constraints.get_unfixed_values()
         samplers = [Utils.categorical_sampler(n_unfixed_values[i]) for i in range(0, split)] + [
             Utils.uniform_sampler(*d_unfixed_values[i]) for i in range(0, nDims - split)]
 
@@ -599,7 +607,6 @@ class Optimiser:
         optimal_params = np.zeros(self._nDims)
         optimal_params[:self._split] = (df['n'].values)[self._n_constraints.get_unfixed_indices()]
         optimal_params[self._split:] = (df['d(nm)'].values * 1e-9)[self._d_constraints.get_unfixed_indices()]
-        print(optimal_params)
 
         wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=1000)
         amplitude_wrapper, _ = self._build_amplitude_function()
