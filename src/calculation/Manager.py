@@ -15,7 +15,7 @@ from pypolychord.priors import UniformPrior
 
 import sys
 
-from src.calculation.Utils import Utils
+from Utils import Utils
 
 # Add subdirectory manually to sys.path. This is necessary because we can't place an __init__.py file into
 # the subdirectory, as this breaks Cython (this is a known Cython bug)

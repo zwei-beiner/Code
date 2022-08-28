@@ -18,7 +18,7 @@ def main():
 
 
 def run():
-    from src.calculation.Manager import Runner
+    from calculation.Manager import Runner
 
 
 if __name__ == '__main__':
