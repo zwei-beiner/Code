@@ -46,8 +46,6 @@ class Optimiser:
         self._project_name = project_name
         self._root: Path = Path.cwd() / self._project_name / f'{M}_layers'
 
-        # Default values
-        # self.set_constraint_M('bounded', (1, 200))
         self._M = M
         self._n_outer = n_outer
         self._n_substrate = n_substrate
@@ -372,18 +370,33 @@ class Optimiser:
 
 
     def plot_reflectivity(self, show_plot: bool, save_plot: bool) -> tuple[plt.Figure, list[plt.Axes]]:
+        """
+        Plot R_s and R_p as a function of wavelength for the optimal solution.
+        Must be run after run_local_optimiser() has finished running.
+
+        @param show_plot: If True, plt.show() is called.
+        @param save_plot: If True, the plot is saved as a PDF.
+        @return: plt.Figure and plt.Axes objects.
+        """
+
+        # Create array containg the optimal solution (indices of which n's to pick and values of d)
         df = pd.read_csv(self._root / 'optimal_parameters.csv')
         optimal_params = np.zeros(self._nDims)
         optimal_params[:self._split] = (df['n'].values)[self._n_constraints.get_unfixed_indices()]
         optimal_params[self._split:] = (df['d(nm)'].values * 1e-9)[self._d_constraints.get_unfixed_indices()]
 
+        # Create array of wavelengths which will be the x-axis values in the plot.
         wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=1000)
+        # Get the amplitude function. Named 'amplitude_wrapper' to avoid confusion with other function defined later
+        # which does the same calculation but takes different function arguments.
         amplitude_wrapper, _ = self._build_amplitude_function()
 
+        # Calculate R_s and R_p values which will be plotted on the y-axis.
         reflectivity_s = np.array([np.abs(amplitude_wrapper(optimal_params, wavelength, 0)) ** 2 for wavelength in wavelengths])
         reflectivity_p = np.array([np.abs(amplitude_wrapper(optimal_params, wavelength, 1)) ** 2 for wavelength in wavelengths])
 
-        def calculate_robustness_analysis(polarisation: int):
+        def calculate_robustness_analysis(polarisation: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+            """Function which returns the tuple (mean, lower error bar, upper error bar) at each wavelength."""
 
             def amplitude_new(d: np.ndarray, wavelength: float, polarisation):
                 # Calculate the amplitude in the case where all thicknesses are varied.
