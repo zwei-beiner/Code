@@ -28,14 +28,15 @@
 \usepackage[multiple]{footmisc}
 
 
-\title{Theoretical Background}
+\title{Documentation}
 \author{Namu Kroupa}
 \date{\today}
 
 \begin{document}
 	\maketitle
 	
-	\section{Matrix equation}
+	\section{Theoretical Background}
+	\subsection{Matrix equation}
 	\begin{figure}[H]
 		\centering
 		\includegraphics[width=0.8\textwidth]{multilayer_stack.png}
@@ -66,15 +67,15 @@
 		\begin{pmatrix}
 			\begin{matrix}a\\b\end{matrix}&\bm{\beta}_0&\bm{0}&\mathbf{0}&\mathbf{0}&\cdots&\mathbf{0}&\begin{matrix}0\\0\end{matrix}\\
 			\hline
-			\begin{matrix}0\\0\end{matrix}&\bm{\alpha}_1&\bm{\beta}_1&\mathbf{0}&\mathbf{0}&\cdots&\mathbf{0}&\begin{matrix}0\\0\end{matrix}\\
+			\begin{matrix}0\\0\end{matrix}&\bm{\alpha}_0&\bm{\beta}_1&\mathbf{0}&\mathbf{0}&\cdots&\mathbf{0}&\begin{matrix}0\\0\end{matrix}\\
 			\hline 
-			\begin{matrix}0\\0\end{matrix}&\mathbf{0}&\bm{\alpha}_2&\bm{\beta}_2&\mathbf{0}&\cdots&\mathbf{0}&\begin{matrix}0\\0\end{matrix}\\
+			\begin{matrix}0\\0\end{matrix}&\mathbf{0}&\bm{\alpha}_1&\bm{\beta}_2&\mathbf{0}&\cdots&\mathbf{0}&\begin{matrix}0\\0\end{matrix}\\
 			\hline
-			\begin{matrix}0\\0\end{matrix}&\mathbf{0}&\mathbf{0}&\bm{\alpha}_3&\bm{\beta}_3&\cdots&\mathbf{0}&\begin{matrix}0\\0\end{matrix}\\
+			\begin{matrix}0\\0\end{matrix}&\mathbf{0}&\mathbf{0}&\bm{\alpha}_2&\bm{\beta}_3&\cdots&\mathbf{0}&\begin{matrix}0\\0\end{matrix}\\
 			\hline
 			\vdots&\vdots&\vdots&\vdots&\vdots&\ddots&\bm{\beta}_{M-1}&\begin{matrix}0\\0\end{matrix}\\
 			\hline
-			\begin{matrix}0\\0\end{matrix}&\mathbf{0}&\mathbf{0}&\mathbf{0}&\mathbf{0}&\cdots&\bm{\alpha}_{M}&\begin{matrix}c\\d\end{matrix}
+			\begin{matrix}0\\0\end{matrix}&\mathbf{0}&\mathbf{0}&\mathbf{0}&\mathbf{0}&\cdots&\bm{\alpha}_{M-1}&\begin{matrix}c\\d\end{matrix}
 		\end{pmatrix},
 	\end{equation}
 	where 
@@ -95,9 +96,9 @@
 		\begin{pmatrix}
 			0&(\bm{\beta}_i)_{01}\\
 			(\bm{\beta}_i)_{00}&(\bm{\beta}_i)_{11}\\
-			(\bm{\beta}_i)_{10}&(\bm{\alpha}_{i+1})_{01}\\
-			(\bm{\alpha}_{i+1})_{00}&(\bm{\alpha}_{i+1})_{11}\\
-			(\bm{\alpha}_{i+1})_{10}&0
+			(\bm{\beta}_i)_{10}&(\bm{\alpha}_{i})_{01}\\
+			(\bm{\alpha}_{i})_{00}&(\bm{\alpha}_{i})_{11}\\
+			(\bm{\alpha}_{i})_{10}&0
 		\end{pmatrix}\quad\quad\text{for}\quad i=0,\dots,M-1
 	\end{equation}
 
@@ -109,9 +110,9 @@
 		d&=n_\text{substrate}\cos\theta_\text{substrate}\\
 		\bm{\alpha}_j&=
 		\begin{pmatrix}
-			-e^{i\phi_{j-1}}&-1\\
-			-e^{i\phi_{j-1}}n_{j-1}\cos\theta_{j-1}&n_{j-1}\cos\theta_{j-1}
-		\end{pmatrix}\quad\quad\text{for}\quad j=1,\dots,M\\
+			-e^{i\phi_{j}}&-1\\
+			-e^{i\phi_{j}}n_{j}\cos\theta_{j}&n_{j}\cos\theta_{j}
+		\end{pmatrix}\quad\quad\text{for}\quad j=0,\dots,M-1\\
 		\bm{\beta}_j&=
 		\begin{dcases}
 			\begin{pmatrix}
@@ -133,9 +134,9 @@
 		d&=n_{\text{substrate}}\\
 		\bm{\alpha}_j&=
 		\begin{pmatrix}
-			-e^{i\phi_{j-1}}\cos\theta_{j-1}&-\cos\theta_{j-1}\\
-			-e^{i\phi_{j-1}}n_{j-1}&n_{j-1}
-		\end{pmatrix}\quad\quad\text{for}\quad j=1,\dots,M\\
+			-e^{i\phi_{j}}\cos\theta_{j}&-\cos\theta_{j}\\
+			-e^{i\phi_{j}}n_{j}&n_{j}
+		\end{pmatrix}\quad\quad\text{for}\quad j=0,\dots,M-1\\
 		\bm{\beta}_j&=
 		\begin{dcases}
 			\begin{pmatrix}
@@ -154,7 +155,7 @@
 		\cos\theta_j&=\sqrt{1-\left(\frac{n_\text{outer}\sin\theta_\text{outer}}{n_j}\right)^2}.
 	\end{align}
 
-	\section{Fabry-Perot interferometer}
+	\subsection{Fabry-Perot interferometer}
 As a test case, the Fabry-Perot interferometer is considered, which consists of a single layer of refractive index $n_\text{layer}$ and thickness $d$ in a medium of refractive index $n_\text{outer}$ and whose complex reflected amplitude, $b_{0,\text{FP}}$, at a wavelength $\lambda_\text{vac}$ (in vacuum) and incident angle $\theta_\text{outer}$ is given by\footnote{The sign in the complex exponential can be positive or negative depending on the convention. But it must be positive here to be consistent with Equation \ref{eqn:matrix-equation}.}\footnote{This expression allows $r$ and $\phi_0$ to become complex, as occurs in total internal reflection, as opposed to the commonly found expression for the reflectivity, which assumes that $r$ is real.}
 \begin{equation}
 	b_{0,\text{FP}}=\frac{r(1-e^{2i\phi_0})}{1-r^2 e^{2i\phi_0}}
@@ -174,7 +175,7 @@ The angle $\theta_\text{layer}$ is the angle of the light ray inside the layer. 
 \end{equation}
 In the case of total internal refraction, $\cos\theta_\text{layer}$ becomes imaginary and the above equations for $R$, $\phi_0$ and $r$ continue to hold.
 
-	\section{Transfer-matrix method}
+	\subsection{Transfer-matrix method}
 	\begin{figure}[H]
 		\centering
 		\includegraphics[width=0.5\textwidth]{transfer_matrix.png}
@@ -261,6 +262,7 @@ In the case of total internal refraction, $\cos\theta_\text{layer}$ becomes imag
 		b_0=\frac{(\mathbf{T})_{10}}{(\mathbf{T})_{00}}.
 	\end{equation}
 
+\section{Implementation}
 	
 %	\bibliographystyle{plain}
 %	\bibliography{refs}
