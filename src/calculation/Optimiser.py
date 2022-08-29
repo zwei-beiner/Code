@@ -497,31 +497,48 @@ class Optimiser:
         return fig, axes
 
 
-    def make_all_plots(self):
+    def make_all_plots(self) -> None:
+        """
+        Calls all plotting functions and saves plots as PDF files.
+        Can only be run after run_local_optimisation() has finished running, because the plotting functions depend on the
+        'optimal_parameters.csv' file which is created in run_local_optimisation().
+        """
+
         self.plot_merit_function(False, True)
         self.plot_marginal_distributions(False, True)
         self.plot_reflectivity(False, True)
         self.plot_critical_thicknesses(False, True)
 
 
-    def get_new_optimiser(self):
+    def get_new_optimiser(self) -> 'Optimiser':
+        """
+        If self.rerun() is True (i.e. there are layers with thickness below the critical thickness and can be removed),
+        this method returns a new Optimiser object with the redundant layers removed.
+
+        @return: Optimiser object with fewer layers.
+        """
+
+        # Read in the optimal solution for n and d.
         df = pd.read_csv(self._root / 'optimal_parameters.csv')
         optimal_n: list[RefractiveIndex] = self._n_constraints.get_values_from_indices(np.int_(df['n'].values).tolist())
         optimal_d: np.ndarray = df['d(nm)'].values * 1e-9
 
+        # Get the indices of the layers for which the thickness is below the critical thickness.
         indices = self.which_layers_can_be_taken_out(optimal_n, optimal_d)
+        # Create new specifications for n and d by taking out the layers at the indices.
         new_n_specification = Utils.take_layers_out(self._n_constraints.get_specification(), indices)
         new_d_specification = Utils.take_layers_out(self._d_constraints.get_specification(), indices)
 
-        # Return new Optimiser object with M, n_specification and d_specification modified.
+        # Return new Optimiser object with M, n_specification and d_specification modified. All other parameters are
+        # kept the same.
         new_optimiser = Optimiser(project_name=self._project_name,
-                                  M=self._M - len(indices),
+                                  M=self._M - len(indices), # M is reduced by len(indices)
                                   n_outer=self._n_outer,
                                   n_substrate=self._n_substrate,
                                   theta_outer=self._theta_outer,
                                   wavelengths=self._wavelengths.get_values(),
-                                  n_specification=new_n_specification,
-                                  d_specification=new_d_specification,
+                                  n_specification=new_n_specification, # Use new specification for n
+                                  d_specification=new_d_specification, # Use new specification for d
                                   p_pol_weighting=self._p_pol_weighting,
                                   s_pol_weighting=self._s_pol_weighting,
                                   phase_weighting=self._phase_weighting,
