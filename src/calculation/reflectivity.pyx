@@ -24,7 +24,10 @@ cpdef np.ndarray [double, ndim=1] reflectivity_automatic_wavelength(int polarisa
 cpdef np.ndarray [double, ndim=1] reflectivity_at_wavelengths(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, np.ndarray [double, ndim=1] wavelengths, double n_outer, double n_substrate, double theta_outer):
     cdef int number = len(wavelengths)
 
-    cdef np.ndarray [double, ndim=1] reflectivities = np.zeros(n, dtype=float)
+    # Cython does not allow np.float_ inside the square brackets, only the type 'double'. But Cython does not allow
+    # dtype=double. Hence, we must use 'double' in the square brackets and 'dtype=np.float_'. This is not a problem
+    # because 'np.float_' is an alias for the C-type 'double'.
+    cdef np.ndarray [double, ndim=1] reflectivities = np.zeros(n, dtype=np.float_)
     cdef int i
     for i in range(number):
         reflectivities[i] = reflectivity(polarisation, M, n, d, wavelengths[i], n_outer, n_substrate, theta_outer)
@@ -44,7 +47,7 @@ cpdef np.ndarray [double, ndim=1] calculate_wavelengths(double min_wavelength, d
         n += 1
 
     # Store wavelengths
-    cdef np.ndarray [double, ndim=1] wavelengths = np.zeros(n, dtype=float)
+    cdef np.ndarray [double, ndim=1] wavelengths = np.zeros(n, dtype=np.float_)
     temp = min_wavelength
     cdef int i
     for i in range(n):
