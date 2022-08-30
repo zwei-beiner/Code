@@ -1,4 +1,7 @@
 from pathlib import Path
+
+from reflectivity_c_file import reflectivity, calculate_wavelengths, amplitude
+
 from typing import Union, Callable
 
 import anesthetic
@@ -9,17 +12,9 @@ import pypolychord
 import scipy.stats
 import scipy.optimize
 
-import sys
-
 from Utils import Utils
 from WrapperClasses import RefractiveIndex, Wavelength_constraint, n_constraints, d_constraints
 
-# Add subdirectory manually to sys.path. This is necessary because we can't place an __init__.py file into
-# the subdirectory, as this breaks Cython (this is a known Cython bug)
-# This enables us to import modules from the subdirectory directly, e.g. 'import reflectivity_c_file'
-file_path = str(Path(__file__).parents[1] / 'calculation')
-sys.path.insert(1, file_path)
-from reflectivity_c_file import reflectivity, calculate_wavelengths, amplitude
 
 
 
@@ -34,12 +29,18 @@ class Optimiser:
                  d_specification: tuple[tuple[str, Union[float, tuple[float, float]]], ...],
                  p_pol_weighting: float,
                  s_pol_weighting: float,
+                 sum_weighting: float,
+                 difference_weighting: float,
                  phase_weighting: float,
                  target_reflectivity_s: Callable[[np.ndarray], np.ndarray] = lambda x: np.zeros(len(x)),
                  target_reflectivity_p: Callable[[np.ndarray], np.ndarray] = lambda x: np.zeros(len(x)),
+                 target_sum: Callable[[np.ndarray], np.ndarray] = lambda x: np.zeros(len(x)),
+                 target_difference: Callable[[np.ndarray], np.ndarray] = lambda x: np.zeros(len(x)),
                  target_relative_phase: Callable[[np.ndarray], np.ndarray] = lambda x: np.zeros(len(x)),
                  weight_function_s: Callable[[np.ndarray], np.ndarray] = lambda x: np.ones(len(x)),
                  weight_function_p: Callable[[np.ndarray], np.ndarray] = lambda x: np.ones(len(x)),
+                 weight_function_sum: Callable[[np.ndarray], np.ndarray] = lambda x: np.ones(len(x)),
+                 weight_function_difference: Callable[[np.ndarray], np.ndarray] = lambda x: np.ones(len(x)),
                  weight_function_phase: Callable[[np.ndarray], np.ndarray] = lambda x: np.ones(len(x))):
 
 
@@ -59,14 +60,20 @@ class Optimiser:
 
         self._s_pol_weighting = s_pol_weighting
         self._p_pol_weighting = p_pol_weighting
+        self._sum_weighting = sum_weighting
+        self._difference_weighting = difference_weighting
         self._phase_weighting = phase_weighting
 
         self._target_reflectivity_s = target_reflectivity_s
         self._target_reflectivity_p = target_reflectivity_p
+        self._target_sum = target_sum
+        self._target_difference = target_difference
         self._target_relative_phase = target_relative_phase
 
         self._weight_function_s = weight_function_s
         self._weight_function_p = weight_function_p
+        self._weight_function_sum = weight_function_sum
+        self._weight_function_difference = weight_function_difference
         self._weight_function_phase = weight_function_phase
 
         # Number of parameters to be optimised
@@ -139,18 +146,29 @@ class Optimiser:
 
                 reflectivities_s[i] = np.abs(amplitude_s) ** 2
                 reflectivities_p[i] = np.abs(amplitude_p) ** 2
-                relative_phases[i] = np.angle(amplitude_s) - np.angle(amplitude_p)
+                # Calculate angle(s/p) instead of angle(s)-angle(p) because angle(s/p) is automatically restricted to
+                # the range [-pi, pi].
+                relative_phases[i] = np.angle(amplitude_s / amplitude_p)
+
+            sum_of_pol = np.abs(reflectivities_s + reflectivities_p)
+            diff_of_pol = np.abs(reflectivities_s - reflectivities_p)
 
             target_reflectivities_s = self._target_reflectivity_s(wavelengths)
             target_reflectivities_p = self._target_reflectivity_p(wavelengths)
+            target_sum = self._target_sum(wavelengths)
+            target_difference = self._target_difference(wavelengths)
             target_relative_phase = self._target_relative_phase(wavelengths)
 
             weights_s = self._weight_function_s(wavelengths)
             weights_p = self._weight_function_p(wavelengths)
+            weights_sum = self._weight_function_sum(wavelengths)
+            weights_difference = self._weight_function_difference(wavelengths)
             weights_relative_phase = self._weight_function_phase(wavelengths)
 
             return self._s_pol_weighting * np.mean(((reflectivities_s - target_reflectivities_s) / weights_s) ** 2) + \
                    self._p_pol_weighting * np.mean(((reflectivities_p - target_reflectivities_p) / weights_p) ** 2) + \
+                   self._sum_weighting * np.mean(((sum_of_pol - target_sum) / weights_sum) ** 2) + \
+                   self._difference_weighting * np.mean(((diff_of_pol - target_difference) / weights_difference) ** 2) + \
                    self._phase_weighting * np.mean(((relative_phases - target_relative_phase) / weights_relative_phase) ** 2)
 
         if self._wavelengths.is_fixed():
@@ -244,10 +262,10 @@ class Optimiser:
                 ax: plt.Axes
                 d_crit_wavelengths = d_crit[i, :]
                 wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=len(d_crit_wavelengths))
-                ax.plot(wavelengths * 1e9, d_crit_wavelengths * 1e9, label='$d_\mathrm{critical}$')
-                ax.plot(wavelengths * 1e9, np.full(len(wavelengths), d[i]) * 1e9, label='$d_\mathrm{optimal}$')
+                ax.plot(wavelengths * 1e9, d_crit_wavelengths * 1e9, label=r'$d_\mathrm{critical}$')
+                ax.plot(wavelengths * 1e9, np.full(len(wavelengths), d[i]) * 1e9, label=r'$d_\mathrm{optimal}$')
                 ax.set_title(f'Layer {(i + 1)}')
-                ax.set_xlabel('Wavelength $\lambda$ [nm]')
+                ax.set_xlabel(r'Wavelength $\lambda$ [nm]')
                 ax.set_ylabel('Layer thickness $d$ [nm]')
             else:
                 ax.axis('off')
@@ -339,7 +357,7 @@ class Optimiser:
                     )
         ax.set_title('Merit function $f$ against PolyChord iteration', fontweight='bold')
         ax.set_ylabel('Merit function $f$')
-        ax.set_xlabel('PolyChord iteration (Number of dead points $n_\mathrm{dead}$)')
+        ax.set_xlabel(r'PolyChord iteration (Number of dead points $n_\mathrm{dead}$)')
         fig.tight_layout()
 
         if show_plot:
@@ -369,7 +387,7 @@ class Optimiser:
         return means, stds, stds
 
 
-    def plot_reflectivity(self, show_plot: bool, save_plot: bool) -> tuple[plt.Figure, list[plt.Axes]]:
+    def plot_reflectivity(self, show_plot: bool, save_plot: bool) -> tuple[tuple[plt.Figure, list[plt.Axes]], ...]:
         """
         Plot R_s and R_p as a function of wavelength for the optimal solution.
         Must be run after run_local_optimiser() has finished running.
@@ -394,8 +412,11 @@ class Optimiser:
         # Calculate R_s and R_p values which will be plotted on the y-axis.
         reflectivity_s = np.array([np.abs(amplitude_wrapper(optimal_params, wavelength, 0)) ** 2 for wavelength in wavelengths])
         reflectivity_p = np.array([np.abs(amplitude_wrapper(optimal_params, wavelength, 1)) ** 2 for wavelength in wavelengths])
+        reflectivity_sum = np.abs(reflectivity_s + reflectivity_p)
+        reflectivity_diff = np.abs(reflectivity_s - reflectivity_p)
+        reflectivity_angle = np.array([np.angle(amplitude_wrapper(optimal_params, wavelength, 0) / amplitude_wrapper(optimal_params, wavelength, 1)) for wavelength in wavelengths])
 
-        def calculate_robustness_analysis(polarisation: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        def calculate_robustness_analysis():
             """Function which returns the tuple (mean, lower error bar, upper error bar) at each wavelength."""
 
             def amplitude_new(d: np.ndarray, wavelength: float, polarisation):
@@ -407,43 +428,91 @@ class Optimiser:
                                                                 enumerate(self._n_constraints.get_unfixed_values())]
                 return amplitude(polarisation, self._M, n, d, wavelength, self._n_outer(wavelength), self._n_substrate(wavelength), self._theta_outer)
 
-            return self._robustness_analysis(lambda d: np.array([np.abs(amplitude_new(d, wavelength, polarisation)) ** 2 for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
+            s = self._robustness_analysis(lambda d: np.array([np.abs(amplitude_new(d, wavelength, 0)) ** 2 for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
+            p = self._robustness_analysis(lambda d: np.array([np.abs(amplitude_new(d, wavelength, 1)) ** 2 for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
+            sum = self._robustness_analysis(lambda d: np.array([(np.abs(amplitude_new(d, wavelength, 0)) ** 2 + np.abs(amplitude_new(d, wavelength, 1)) ** 2) for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
+            diff = self._robustness_analysis(lambda d: np.array([(np.abs(amplitude_new(d, wavelength, 0)) ** 2 - np.abs(amplitude_new(d, wavelength, 1)) ** 2) for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
+            angle = self._robustness_analysis(lambda d: np.array([(np.angle(amplitude_new(d, wavelength, 0) / amplitude_new(d, wavelength, 1))) for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
 
-        means_s, lower_s, upper_s = calculate_robustness_analysis(0)
-        means_p, lower_p, upper_p = calculate_robustness_analysis(1)
+            return s, p, sum, diff, angle
 
-        fig: plt.Figure
+        res = calculate_robustness_analysis()
+        means_s, lower_s, upper_s = res[0]
+        means_p, lower_p, upper_p = res[1]
+        means_sum, lower_sum, upper_sum = res[2]
+        means_diff, lower_diff, upper_diff = res[3]
+        means_angle, lower_angle, upper_angle = res[4]
+
+        # Plot R_s and R_p
+        fig1: plt.Figure
         ax_s: plt.Axes
         ax_p: plt.Axes
-        fig, (ax_s, ax_p) = plt.subplots(2, 1, figsize=(9, 6))
-        ax_s.plot(wavelengths * 1e9, self._target_reflectivity_s(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
+        fig1, (ax_s, ax_p) = plt.subplots(2, 1, figsize=(9, 6))
+        if self._s_pol_weighting != 0:
+            # Only plot the target if the user has switched on this term in the merit function. That is, do not plot
+            # if the user has set self._s_pol_weighting to zero.
+            ax_s.plot(wavelengths * 1e9, self._target_reflectivity_s(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
         ax_s.plot(wavelengths * 1e9, reflectivity_s, label='Optimal reflectivity', color='red', linewidth=0.5)
         # Need linewidth=0 as otherwise fill_between leaks colour (See https://github.com/matplotlib/matplotlib/issues/23764).
         ax_s.fill_between(wavelengths * 1e9, means_s - lower_s, means_s + upper_s, alpha=0.25, color='red', linewidth=0)
-        ax_s.set_ylabel('$R_\mathrm{s}$')
+        ax_s.set_ylabel(r'$R_\mathrm{s}$')
         ax_s.set_title('Reflectivity against wavelength (s-polarisation)', fontweight='bold')
 
-        ax_p.plot(wavelengths * 1e9, self._target_reflectivity_p(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
+        if self._p_pol_weighting != 0:
+            ax_p.plot(wavelengths * 1e9, self._target_reflectivity_p(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
         ax_p.plot(wavelengths * 1e9, reflectivity_p, label='Optimal reflectivity', color='red', linewidth=0.5)
         # Need linewidth=0 as otherwise fill_between leaks colour (See https://github.com/matplotlib/matplotlib/issues/23764).
         ax_p.fill_between(wavelengths * 1e9, means_p - lower_p, means_p + upper_p, alpha=0.25, color='red', linewidth=0)
-        ax_p.set_ylabel('$R_\mathrm{p}$')
+        ax_p.set_ylabel(r'$R_\mathrm{p}$')
         ax_p.set_title('Reflectivity against wavelength (p-polarisation)', fontweight='bold')
 
-        for ax in [ax_s, ax_p]:
-            ax.set_xlabel('Wavelength $\lambda$ [nm]')
+        # Plot of |R_s+R_p|, |R_s-R_p|, angle_s-angle_p
+        fig2: plt.Figure
+        ax_sum: plt.Axes
+        ax_diff: plt.Axes
+        ax_angle: plt.Axes
+        fig2, (ax_sum, ax_diff, ax_angle) = plt.subplots(3, 1, figsize=(9, 9))
+
+        if self._sum_weighting != 0:
+            ax_sum.plot(wavelengths * 1e9, self._target_sum(wavelengths), label='Target reflectivity',
+                  color='blue', linewidth=0.5)
+        ax_sum.plot(wavelengths * 1e9, reflectivity_sum, label='Optimal reflectivity', color='red', linewidth=0.5)
+        ax_sum.fill_between(wavelengths * 1e9, means_sum - lower_sum, means_sum + upper_sum, alpha=0.25, color='red', linewidth=0)
+        ax_sum.set_ylabel(r'$|R_\mathrm{s} + R_\mathrm{p}|$')
+        ax_sum.set_title('Sum of s- and p-reflectivities against wavelength', fontweight='bold')
+
+        if self._difference_weighting != 0:
+            ax_diff.plot(wavelengths * 1e9, self._target_difference(wavelengths), label='Target reflectivity',
+                        color='blue', linewidth=0.5)
+        ax_diff.plot(wavelengths * 1e9, reflectivity_diff, label='Optimal reflectivity', color='red', linewidth=0.5)
+        ax_diff.fill_between(wavelengths * 1e9, means_diff - lower_diff, means_diff + upper_diff, alpha=0.25, color='red', linewidth=0)
+        ax_diff.set_ylabel(r'$|R_\mathrm{s} - R_\mathrm{p}|$')
+        ax_diff.set_title('Difference of s- and p-reflectivities against wavelength', fontweight='bold')
+
+        if self._phase_weighting != 0:
+            ax_angle.plot(wavelengths * 1e9, self._target_relative_phase(wavelengths), label='Target phase difference',
+                         color='blue', linewidth=0.5)
+        ax_angle.plot(wavelengths * 1e9, reflectivity_angle, label='Optimal phase difference', color='red', linewidth=0.5)
+        ax_angle.fill_between(wavelengths * 1e9, means_angle - lower_angle, means_angle + upper_angle, alpha=0.25, color='red', linewidth=0)
+        ax_angle.set_ylabel(r'$\phi_\mathrm{s} - \phi_\mathrm{p}$ [rad]')
+        ax_angle.set_title('Phase difference of s- and p-polarised light against wavelength', fontweight='bold')
+
+        for ax in [ax_s, ax_p, ax_sum, ax_diff, ax_angle]:
+            ax.set_xlabel(r'Wavelength $\lambda$ [nm]')
             ax.set_xlim(np.amin(wavelengths) * 1e9, np.amax(wavelengths) * 1e9)
             ax.legend()
 
-        fig.tight_layout()
-        fig.subplots_adjust(hspace=0.6)
+        for fig in [fig1, fig2]:
+            fig.tight_layout()
+            fig.subplots_adjust(hspace=0.6)
 
         if show_plot:
             plt.show()
         if save_plot:
-            fig.savefig(self._root / 'reflectivity_plot.pdf')
+            fig1.savefig(self._root / 'reflectivity_plot.pdf')
+            fig2.savefig(self._root / 'sum_difference_phase_plot.pdf')
 
-        return fig, [ax_s, ax_p]
+        return (fig1, [ax_s, ax_p]), (fig2, [ax_sum, ax_diff, ax_angle])
 
 
     def plot_marginal_distributions(self, show_plot: bool, save_plot: bool) -> tuple[plt.Figure, list[plt.Axes]]:
@@ -479,7 +548,7 @@ class Optimiser:
             # is a refractive index n.
             if i < self._split:
                 # Set the title as n_{which layer does this refractive index belong to?}.
-                ax.set_xlabel('$n_\mathrm{' + str(self._n_constraints.get_unfixed_indices()[i]) + '}$')
+                ax.set_xlabel(r'$n_\mathrm{' + str(self._n_constraints.get_unfixed_indices()[i]) + '}$')
                 # Get the ith column from the data frame, which are the ith parameter values of the dead points and cast
                 # them to integers.
                 data = np.int_(dataframe[i].values)
@@ -490,7 +559,7 @@ class Optimiser:
             # For i > self._split, the parameter is a thickness d.
             elif i < self._nDims:
                 # Set the title as d_{which layer does this thickness belong to?}.
-                ax.set_xlabel('$d_\mathrm{' + str(self._d_constraints.get_unfixed_indices()[i - self._split]) + '}$ [nm]')
+                ax.set_xlabel(r'$d_\mathrm{' + str(self._d_constraints.get_unfixed_indices()[i - self._split]) + '}$ [nm]')
                 # Get the ith column from the data frame, which are the ith parameter values of the dead points. Convert
                 # the unit 'meter' to 'nanometers'.
                 data = dataframe[i].values * 1e9
@@ -554,11 +623,17 @@ class Optimiser:
                                   d_specification=new_d_specification, # Use new specification for d
                                   p_pol_weighting=self._p_pol_weighting,
                                   s_pol_weighting=self._s_pol_weighting,
+                                  sum_weighting=self._sum_weighting,
+                                  difference_weighting=self._difference_weighting,
                                   phase_weighting=self._phase_weighting,
                                   target_reflectivity_s=self._target_reflectivity_s,
                                   target_reflectivity_p=self._target_reflectivity_p,
+                                  target_sum=self._target_sum,
+                                  target_difference=self._target_difference,
                                   target_relative_phase=self._target_relative_phase,
                                   weight_function_s=self._weight_function_s,
                                   weight_function_p=self._weight_function_p,
+                                  weight_function_sum=self._weight_function_sum,
+                                  weight_function_difference=self._weight_function_difference,
                                   weight_function_phase=self._weight_function_phase)
         return new_optimiser
