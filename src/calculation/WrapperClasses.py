@@ -5,7 +5,7 @@ import numpy as np
 
 from ConstraintTypes import AbstractConstraint, FixedConstraint, CategoricalConstraint, BoundedConstraint
 
-RefractiveIndex = Callable[[Union[float, np.ndarray]], Union[float, np.ndarray]]
+RefractiveIndex = Callable[[np.ndarray], np.ndarray]
 
 class n_constraints:
     def __init__(self, params: tuple[tuple[str, Union[RefractiveIndex, list[RefractiveIndex]]], ...]):
@@ -104,6 +104,17 @@ class d_constraints:
 
     def get_specification(self):
         return self._specification
+
+    def get_D_max(self) -> float:
+        """
+        Returns maximum possible thickness D_max.
+        """
+
+        # Sum all fixed values.
+        sum_1 = sum(self.get_fixed_values())
+        # Sum all upper limits taken from the tuples.
+        sum_2 = sum(l[1] for l in self.get_unfixed_values())
+        return sum_1 + sum_2
 
 
 class Wavelength_constraint:

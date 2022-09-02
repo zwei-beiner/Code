@@ -19,8 +19,8 @@ class Utils:
 
     @staticmethod
     def constant(val: float):
-        def n(wavelength: float) -> float:
-            return val
+        def n(wavelengths: np.ndarray) -> np.ndarray:
+            return np.full(len(wavelengths), val)
         return n
 
 
@@ -59,7 +59,9 @@ class Utils:
 
     @staticmethod
     def uniform_sampler(min: float, max: float):
+        rv = UniformPrior(min, max)
+
         def prior(x):
-            return UniformPrior(min, max)(x)
+            return rv(x)
 
         return prior

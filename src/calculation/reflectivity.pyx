@@ -16,81 +16,87 @@ cdef extern from "<math.h>" nogil:
 
 cdef double PI = 3.14159265358979323846
 
-
-cpdef np.ndarray [double, ndim=1] reflectivity_automatic_wavelength(int polarisation, int M, np.ndarray[double, ndim=1] n, np.ndarray[double, ndim=1] d, double min_wavelength, double max_wavelength, double n_outer, double n_substrate, double theta_outer):
-    return reflectivity_at_wavelengths(polarisation, M, n, d, calculate_wavelengths(min_wavelength, max_wavelength, d), n_outer, n_substrate, theta_outer)
-
-
-cpdef np.ndarray [double, ndim=1] reflectivity_at_wavelengths(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, np.ndarray [double, ndim=1] wavelengths, double n_outer, double n_substrate, double theta_outer):
-    cdef int number = len(wavelengths)
-
-    # Cython does not allow np.float_ inside the square brackets, only the type 'double'. But Cython does not allow
-    # dtype=double. Hence, we must use 'double' in the square brackets and 'dtype=np.float_'. This is not a problem
-    # because 'np.float_' is an alias for the C-type 'double'.
-    cdef np.ndarray [double, ndim=1] reflectivities = np.zeros(n, dtype=np.float_)
-    cdef int i
-    for i in range(number):
-        reflectivities[i] = reflectivity(polarisation, M, n, d, wavelengths[i], n_outer, n_substrate, theta_outer)
-
-    return reflectivities
-
-
-cpdef np.ndarray [double, ndim=1] calculate_wavelengths(double min_wavelength, double max_wavelength, double total_thickness):
-    # cdef double total_thickness = d.sum()
-    cdef double f = 1 / (8 * total_thickness)
-
-    # Calculate number of points
-    cdef double temp = min_wavelength
-    cdef int n = 0
-    while temp < max_wavelength:
-        temp += f * temp ** 2
-        n += 1
-
-    # Store wavelengths
-    cdef np.ndarray [double, ndim=1] wavelengths = np.zeros(n, dtype=np.float_)
-    temp = min_wavelength
-    cdef int i
-    for i in range(n):
-        wavelengths[i] = temp
-        temp += f * temp ** 2
-
-    return wavelengths
-
-
-cpdef double reflectivity(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, double wavelength, double n_outer,
-                 double n_substrate, double theta_outer):
+cdef class reflectivity_namespace:
     """
-    Calculates the reflectivity.
-    Function arguments are the same as for 'ampltiude()'.
-
-    @return: Reflectivity |amplitude|^2
-    """
-    return np.abs(amplitude(polarisation,  M, n, d, wavelength, n_outer, n_substrate, theta_outer)) ** 2
-
-
-cpdef double phase(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, double wavelength, double n_outer,
-                 double n_substrate, double theta_outer):
-    """
-    Calculates phase of the reflected complex amplitude.
-    Function arguments are the same as for 'ampltiude()'.
-
-    @return: Phase in the range (-pi, pi]
-    """
-    return np.angle(amplitude(polarisation,  M, n, d, wavelength, n_outer, n_substrate, theta_outer))
-
-
-cpdef complex amplitude(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, double wavelength, double n_outer,
-                 double n_substrate, double theta_outer):
-    """
-    Calculates the reflected complex amplitude by solving the linear system Mx=b for x.
-    Function arguments are the same as for '_make_matrix()'.
+    To 'cimport' Cython functions in another .pyx file, the functions in this file have to be wrapped in a class.
+    Otherwise, a '__pyx_capi__ not defined' error is thrown.
+    See https://stackoverflow.com/questions/56560007/building-python-package-containing-multiple-cython-extensions/56807269#56807269
     """
 
-    cdef np.ndarray [complex, ndim=2] mat = _make_matrix(polarisation, M, n, d, 2 * PI / wavelength, n_outer, n_substrate, theta_outer)
-    cdef np.ndarray [complex, ndim=1] c = _make_vector(M)
-    # M is a banded matrix so that 'solve_banded' can be used. Flags are set for performance.
-    cdef np.ndarray [complex, ndim=1] x = scipy.linalg.solve_banded(l_and_u=(2, 2), ab=mat, b=c, overwrite_ab=True, overwrite_b=True, check_finite=False)
-    return x[0]
+# cpdef np.ndarray [double, ndim=1] reflectivity_automatic_wavelength(int polarisation, int M, np.ndarray[double, ndim=1] n, np.ndarray[double, ndim=1] d, double min_wavelength, double max_wavelength, double n_outer, double n_substrate, double theta_outer):
+#     return reflectivity_at_wavelengths(polarisation, M, n, d, calculate_wavelengths(min_wavelength, max_wavelength, d), n_outer, n_substrate, theta_outer)
+
+    cpdef complex[:] amplitude_at_wavelengths(self, int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, np.ndarray [double, ndim=1] wavelengths, double n_outer, double n_substrate, double theta_outer):
+        # Cython does not allow np.float_ inside the square brackets, only the type 'double'. But Cython does not allow
+        # dtype=double. Hence, we must use 'double' in the square brackets and 'dtype=np.float_'. This is not a problem
+        # because 'np.float_' is an alias for the C-type 'double'.
+        cdef np.ndarray [complex, ndim=1] amplitudes = np.zeros(n, dtype=complex)
+        cdef int i
+        for i in range(len(wavelengths)):
+            amplitudes[i] = self.amplitude(polarisation, M, n, d, wavelengths[i], n_outer, n_substrate, theta_outer)
+
+        return amplitudes
+
+
+    cpdef double[:] calculate_wavelengths(self, double min_wavelength, double max_wavelength, double total_thickness):
+        # cdef double total_thickness = d.sum()
+        cdef double f = 1 / (8 * total_thickness)
+
+        # Calculate number of points
+        cdef double temp = min_wavelength
+        cdef int n = 0
+        while temp < max_wavelength:
+            temp += f * temp ** 2
+            n += 1
+
+        # Store wavelengths
+        cdef np.ndarray [double, ndim=1] wavelengths = np.zeros(n, dtype=np.float_)
+        temp = min_wavelength
+        cdef int i
+        for i in range(n):
+            wavelengths[i] = temp
+            temp += f * temp ** 2
+
+        cdef double[:] wave = wavelengths
+        return wavelengths
+
+
+    # cpdef double reflectivity(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, double wavelength, double n_outer,
+    #                  double n_substrate, double theta_outer):
+    #     """
+    #     Calculates the reflectivity.
+    #     Function arguments are the same as for 'ampltiude()'.
+    #
+    #     @return: Reflectivity |amplitude|^2
+    #     """
+    #     return np.abs(amplitude(polarisation,  M, n, d, wavelength, n_outer, n_substrate, theta_outer)) ** 2
+    #
+    #
+    # cpdef double phase(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, double wavelength, double n_outer,
+    #                  double n_substrate, double theta_outer):
+    #     """
+    #     Calculates phase of the reflected complex amplitude.
+    #     Function arguments are the same as for 'ampltiude()'.
+    #
+    #     @return: Phase in the range (-pi, pi]
+    #     """
+    #     return np.angle(amplitude(polarisation,  M, n, d, wavelength, n_outer, n_substrate, theta_outer))
+
+
+    cpdef complex amplitude(self, int polarisation, int M, double[:] n, double[:] d, double wavelength, double n_outer,
+                     double n_substrate, double theta_outer):
+        """
+        Calculates the reflected complex amplitude by solving the linear system Mx=b for x.
+        Function arguments are the same as for '_make_matrix()'.
+        """
+
+        # Cast memoryviews (double[:]) into numpy arrays using np.asarray because otherwise a runtime error
+        # "Cannot convert calculation.reflectivity._memoryviewslice to numpy.ndarray" is thrown.
+        cdef np.ndarray [complex, ndim=2] mat = _make_matrix(polarisation, M, np.asarray(n), np.asarray(d), 2 * PI / wavelength, n_outer, n_substrate, theta_outer)
+        cdef np.ndarray [complex, ndim=1] c = _make_vector(M)
+        # M is a banded matrix so that 'solve_banded' can be used. Flags are set for performance.
+        cdef np.ndarray [complex, ndim=1] x = scipy.linalg.solve_banded(l_and_u=(2, 2), ab=mat, b=c, overwrite_ab=True, overwrite_b=True, check_finite=False)
+        return x[0]
 
 
 cpdef np.ndarray [complex, ndim=2] _make_matrix(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, double k_outer, double n_outer, double n_substrate, double theta_outer):

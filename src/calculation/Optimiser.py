@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from reflectivity_c_file import reflectivity, calculate_wavelengths, amplitude
+from reflectivity import reflectivity_namespace
+r = reflectivity_namespace()
+from BackendCalculations_c_file import BackendCalculations
 
 from typing import Union, Callable
 
@@ -14,6 +16,7 @@ import scipy.optimize
 
 from Utils import Utils
 from WrapperClasses import RefractiveIndex, Wavelength_constraint, n_constraints, d_constraints
+from MeritFunctionSpecification import MeritFunctionSpecification
 
 
 
@@ -53,8 +56,8 @@ class Optimiser:
         self._theta_outer = theta_outer
         self._wavelengths = Wavelength_constraint(wavelengths)
 
-        if len(n_specification) is not self._M or len(d_specification) is not self._M:
-            raise Exception(f'Invalid specification length: {len(n_specification), len(d_specification)}')
+        if len(n_specification) != self._M or len(d_specification) != self._M:
+            raise Exception(f'Invalid specification length: {len(n_specification), len(d_specification), self._M}')
         self._n_constraints = n_constraints(n_specification)
         self._d_constraints = d_constraints(d_specification)
 
@@ -76,10 +79,43 @@ class Optimiser:
         self._weight_function_difference = weight_function_difference
         self._weight_function_phase = weight_function_phase
 
+        self._merit_function_specification = MeritFunctionSpecification(
+            s_pol_weighting=s_pol_weighting,
+            p_pol_weighting=p_pol_weighting,
+            sum_weighting=sum_weighting,
+            difference_weighting=difference_weighting,
+            phase_weighting=phase_weighting,
+            target_reflectivity_s=target_reflectivity_s,
+            target_reflectivity_p=target_reflectivity_p,
+            target_sum=target_sum,
+            target_difference=target_difference,
+            target_relative_phase=target_relative_phase,
+            weight_function_s=weight_function_s,
+            weight_function_p=weight_function_p,
+            weight_function_sum=weight_function_sum,
+            weight_function_difference=weight_function_difference,
+            weight_function_phase=weight_function_phase
+        )
+
         # Number of parameters to be optimised
         self._nDims = len(self._n_constraints.get_unfixed_indices()) + len(self._d_constraints.get_unfixed_indices())
         # Index which is used to split parameter array between n (index < split) and d (index > split)
         self._split = len(self._n_constraints.get_unfixed_indices())
+
+        D_max: float = self._d_constraints.get_D_max()
+        min_wavelength, max_wavelength = self._wavelengths.get_min_max()
+        layer_specification = tuple(
+            val if (type(val) is list) else [val] for _, val in self._n_constraints.get_specification())
+
+        self.backend_calculations = BackendCalculations(
+            self._M, self._n_outer, self._n_substrate, self._theta_outer, D_max, min_wavelength, max_wavelength,
+            layer_specification, self._merit_function_specification,
+            np.array(self._d_constraints.get_fixed_indices(), dtype=np.int_), np.array(self._d_constraints.get_unfixed_indices(), dtype=np.int_),
+            np.array(self._d_constraints.get_fixed_values(), dtype=np.float_), self._d_constraints.get_unfixed_values(),
+            np.array(self._n_constraints.get_fixed_indices(), dtype=np.int_), np.array(self._n_constraints.get_unfixed_indices(), dtype=np.int_),
+            self._n_constraints.get_unfixed_values(),
+            self._split, self._nDims, self._wavelengths.get_values() if self._wavelengths.is_fixed() else None
+        )
 
 
     @property
@@ -87,112 +123,119 @@ class Optimiser:
         return self._M
 
 
-    def _build_amplitude_function(self):
-        split = self._split
-        nDims = self._nDims
-
-        n_unfixed_values: list[list[RefractiveIndex]] = self._n_constraints.get_unfixed_values()
-        n_fixed_values: list[RefractiveIndex] = self._n_constraints.get_fixed_values()
-        d_unfixed_values: list[tuple[float]] = self._d_constraints.get_unfixed_values()
-        d_fixed_values: list[float] = self._d_constraints.get_fixed_values()
-
-        n_unfixed_indices: list[int] = self._n_constraints.get_unfixed_indices()
-        n_fixed_indices: list[int] = self._n_constraints.get_fixed_indices()
-        d_unfixed_indices: list[int] = self._d_constraints.get_unfixed_indices()
-        d_fixed_indices: list[int] = self._d_constraints.get_fixed_indices()
-
-        # params is an array of length 2M-nFixed where nFixed is the total number of fixed parameters.
-        def amplitude_wrapper(params: np.ndarray, wavelength: float, polarisation: int):
-            n = np.zeros(self._M)
-            n[n_fixed_indices] = [n(wavelength) for n in n_fixed_values]
-            n[n_unfixed_indices] = [ns[np.int_(params[:split][i])](wavelength) for i, ns in enumerate(n_unfixed_values)]
-
-            d = np.zeros(self._M)
-            d[d_fixed_indices] = d_fixed_values
-            d[d_unfixed_indices] = params[split:]
-
-            return amplitude(polarisation, self._M, n, d, wavelength, self._n_outer(wavelength), self._n_substrate(wavelength),
-                             self._theta_outer)
-
-        samplers = [Utils.categorical_sampler(n_unfixed_values[i]) for i in range(0, split)] + [
-            Utils.uniform_sampler(*d_unfixed_values[i]) for i in range(0, nDims - split)]
-
-        def prior(unit_cube):
-            sample = np.zeros(nDims)
-
-            for i in range(0, split):
-                sample[i] = samplers[i](unit_cube[i])
-
-            for i in range(split, nDims):
-                sample[i] = samplers[i](unit_cube[i])
-
-            return sample
-
-        return amplitude_wrapper, prior
-
-
-    def _build_merit_function_and_prior(self):
-        amplitude_wrapper, prior = self._build_amplitude_function()
-
-        def merit_function_wrapper(params: np.ndarray, wavelengths: np.ndarray):
-            num_wavelengths = len(wavelengths)
-
-            reflectivities_s = np.zeros(num_wavelengths)
-            reflectivities_p = np.zeros(num_wavelengths)
-            relative_phases = np.zeros(num_wavelengths)
-            for i in range(num_wavelengths):
-                amplitude_s = amplitude_wrapper(params, wavelengths[i], 0)
-                amplitude_p = amplitude_wrapper(params, wavelengths[i], 1)
-
-                reflectivities_s[i] = np.abs(amplitude_s) ** 2
-                reflectivities_p[i] = np.abs(amplitude_p) ** 2
-                # Calculate angle(s/p) instead of angle(s)-angle(p) because angle(s/p) is automatically restricted to
-                # the range [-pi, pi].
-                relative_phases[i] = np.angle(amplitude_s / amplitude_p)
-
-            sum_of_pol = np.abs(reflectivities_s + reflectivities_p)
-            diff_of_pol = np.abs(reflectivities_s - reflectivities_p)
-
-            target_reflectivities_s = self._target_reflectivity_s(wavelengths)
-            target_reflectivities_p = self._target_reflectivity_p(wavelengths)
-            target_sum = self._target_sum(wavelengths)
-            target_difference = self._target_difference(wavelengths)
-            target_relative_phase = self._target_relative_phase(wavelengths)
-
-            weights_s = self._weight_function_s(wavelengths)
-            weights_p = self._weight_function_p(wavelengths)
-            weights_sum = self._weight_function_sum(wavelengths)
-            weights_difference = self._weight_function_difference(wavelengths)
-            weights_relative_phase = self._weight_function_phase(wavelengths)
-
-            return self._s_pol_weighting * np.mean(((reflectivities_s - target_reflectivities_s) / weights_s) ** 2) + \
-                   self._p_pol_weighting * np.mean(((reflectivities_p - target_reflectivities_p) / weights_p) ** 2) + \
-                   self._sum_weighting * np.mean(((sum_of_pol - target_sum) / weights_sum) ** 2) + \
-                   self._difference_weighting * np.mean(((diff_of_pol - target_difference) / weights_difference) ** 2) + \
-                   self._phase_weighting * np.mean(((relative_phases - target_relative_phase) / weights_relative_phase) ** 2)
-
-        if self._wavelengths.is_fixed():
-            def merit_function(params: np.ndarray):
-                wavelengths = self._wavelengths.get_values()
-                return merit_function_wrapper(params, wavelengths)
-
-        else:
-            def merit_function(params: np.ndarray):
-                split = len(self._n_constraints.get_unfixed_indices())
-                wavelengths = calculate_wavelengths(*self._wavelengths.get_values(),
-                                np.array(self._d_constraints.get_fixed_values()).sum() + params[split:].sum())
-                return merit_function_wrapper(params, wavelengths)
-
-        return merit_function, prior
+    # def _build_amplitude_function(self):
+    #     split = self._split
+    #     nDims = self._nDims
+    #
+    #     n_unfixed_values: list[list[RefractiveIndex]] = self._n_constraints.get_unfixed_values()
+    #     n_fixed_values: list[RefractiveIndex] = self._n_constraints.get_fixed_values()
+    #     d_unfixed_values: list[tuple[float]] = self._d_constraints.get_unfixed_values()
+    #     d_fixed_values: list[float] = self._d_constraints.get_fixed_values()
+    #
+    #     n_unfixed_indices: list[int] = self._n_constraints.get_unfixed_indices()
+    #     n_fixed_indices: list[int] = self._n_constraints.get_fixed_indices()
+    #     d_unfixed_indices: list[int] = self._d_constraints.get_unfixed_indices()
+    #     d_fixed_indices: list[int] = self._d_constraints.get_fixed_indices()
+    #
+    #     # params is an array of length 2M-nFixed where nFixed is the total number of fixed parameters.
+    #     def amplitude_wrapper(params: np.ndarray, wavelength: float, polarisation: int):
+    #         n = np.zeros(self._M)
+    #         n[n_fixed_indices] = [n(wavelength) for n in n_fixed_values]
+    #         n[n_unfixed_indices] = [ns[np.int_(params[:split][i])](wavelength) for i, ns in enumerate(n_unfixed_values)]
+    #
+    #         d = np.zeros(self._M)
+    #         d[d_fixed_indices] = d_fixed_values
+    #         d[d_unfixed_indices] = params[split:]
+    #
+    #         return r.amplitude(polarisation, self._M, n, d, wavelength, self._n_outer(wavelength), self._n_substrate(wavelength),
+    #                          self._theta_outer)
+    #
+    #     samplers = [Utils.categorical_sampler(n_unfixed_values[i]) for i in range(0, split)] + [
+    #         Utils.uniform_sampler(*d_unfixed_values[i]) for i in range(0, nDims - split)]
+    #
+    #     def prior(unit_cube):
+    #         sample = np.zeros(nDims)
+    #
+    #         for i in range(0, split):
+    #             sample[i] = samplers[i](unit_cube[i])
+    #
+    #         for i in range(split, nDims):
+    #             sample[i] = samplers[i](unit_cube[i])
+    #
+    #         return sample
+    #
+    #     return amplitude_wrapper, prior
+    #
+    #
+    # def _build_merit_function_and_prior(self):
+    #     amplitude_wrapper, prior = self._build_amplitude_function()
+    #
+    #     def merit_function_wrapper(params: np.ndarray, wavelengths: np.ndarray):
+    #         num_wavelengths = len(wavelengths)
+    #
+    #         reflectivities_s = np.zeros(num_wavelengths)
+    #         reflectivities_p = np.zeros(num_wavelengths)
+    #         relative_phases = np.zeros(num_wavelengths)
+    #         for i in range(num_wavelengths):
+    #             amplitude_s = amplitude_wrapper(params, wavelengths[i], 0)
+    #             amplitude_p = amplitude_wrapper(params, wavelengths[i], 1)
+    #
+    #             reflectivities_s[i] = np.abs(amplitude_s) ** 2
+    #             reflectivities_p[i] = np.abs(amplitude_p) ** 2
+    #             # Calculate angle(s/p) instead of angle(s)-angle(p) because angle(s/p) is automatically restricted to
+    #             # the range [-pi, pi].
+    #             relative_phases[i] = np.angle(amplitude_s / amplitude_p)
+    #
+    #         sum_of_pol = np.abs(reflectivities_s + reflectivities_p)
+    #         diff_of_pol = np.abs(reflectivities_s - reflectivities_p)
+    #
+    #         target_reflectivities_s = self._target_reflectivity_s(wavelengths)
+    #         target_reflectivities_p = self._target_reflectivity_p(wavelengths)
+    #         target_sum = self._target_sum(wavelengths)
+    #         target_difference = self._target_difference(wavelengths)
+    #         target_relative_phase = self._target_relative_phase(wavelengths)
+    #
+    #         weights_s = self._weight_function_s(wavelengths)
+    #         weights_p = self._weight_function_p(wavelengths)
+    #         weights_sum = self._weight_function_sum(wavelengths)
+    #         weights_difference = self._weight_function_difference(wavelengths)
+    #         weights_relative_phase = self._weight_function_phase(wavelengths)
+    #
+    #         return self._s_pol_weighting * np.mean(((reflectivities_s - target_reflectivities_s) / weights_s) ** 2) + \
+    #                self._p_pol_weighting * np.mean(((reflectivities_p - target_reflectivities_p) / weights_p) ** 2) + \
+    #                self._sum_weighting * np.mean(((sum_of_pol - target_sum) / weights_sum) ** 2) + \
+    #                self._difference_weighting * np.mean(((diff_of_pol - target_difference) / weights_difference) ** 2) + \
+    #                self._phase_weighting * np.mean(((relative_phases - target_relative_phase) / weights_relative_phase) ** 2)
+    #
+    #     if self._wavelengths.is_fixed():
+    #         def merit_function(params: np.ndarray):
+    #             wavelengths = self._wavelengths.get_values()
+    #             return merit_function_wrapper(params, wavelengths)
+    #
+    #     else:
+    #         def merit_function(params: np.ndarray):
+    #             split = len(self._n_constraints.get_unfixed_indices())
+    #             wavelengths = r.calculate_wavelengths(*self._wavelengths.get_values(),
+    #                             np.array(self._d_constraints.get_fixed_values()).sum() + params[split:].sum())
+    #             return merit_function_wrapper(params, wavelengths)
+    #
+    #     return merit_function, prior
 
 
     def _build_likelihood_and_prior(self):
-        merit_function, prior = self._build_merit_function_and_prior()
+        # merit_function, prior = self._build_merit_function_and_prior()
+        # return (lambda param: (-merit_function(param), [])), prior
+
+        if self._wavelengths.is_fixed():
+            merit_function = self.backend_calculations.merit_function_fixed_wavelength
+        else:
+            merit_function = self.backend_calculations.merit_function_auto_wavelength
 
         def likelihood(params):
+            # print('called likelihood with params = ', params)
             return -merit_function(params), []
 
-        return likelihood, prior
+        return likelihood, self.backend_calculations.prior
 
 
     def run_global_optimisation(self):
@@ -218,12 +261,12 @@ class Optimiser:
         wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=100)
         d_crit = np.zeros((self._M, len(wavelengths)))
         for i in range(self._M):
-            for j in range(len(wavelengths)):
-                n_outer = self._n_outer(wavelengths[j])
-                n = (optimal_n[i])(wavelengths[j])
-                cos_theta = np.sqrt(np.complex_(1 - (n_outer / n) ** 2 * np.sin(self._theta_outer) ** 2))
-                k_x = 2 * np.pi/wavelengths[j] * (n / n_outer) * cos_theta
-                d_crit[i, j] = np.abs(1 / k_x)
+            # for j in range(len(wavelengths)):
+            n_outer = self._n_outer(wavelengths)
+            n = (optimal_n[i])(wavelengths)
+            cos_theta = np.sqrt(np.complex_(1 - (n_outer / n) ** 2 * np.sin(self._theta_outer) ** 2))
+            k_x = 2 * np.pi/wavelengths * (n / n_outer) * cos_theta
+            d_crit[i, :] = np.abs(1 / k_x)
         return 0.01 * d_crit
 
 
@@ -293,7 +336,8 @@ class Optimiser:
         # print(max_row)
         params = max_row.loc[:, 0:(self._nDims - 1)].values.flatten()
 
-        merit_function, _ = self._build_merit_function_and_prior()
+        # merit_function, _ = self._build_merit_function_and_prior()
+        merit_function = lambda params: -((self._build_likelihood_and_prior()[0])(params)[0])
 
         bounds = [(0, (len(val) - 1) + 0.9) for val in self._n_constraints.get_unfixed_values()] + self._d_constraints.get_unfixed_values()
         def wrapped_merit_function(params: np.ndarray) -> float:
@@ -399,49 +443,52 @@ class Optimiser:
 
         # Create array containg the optimal solution (indices of which n's to pick and values of d)
         df = pd.read_csv(self._root / 'optimal_parameters.csv')
-        optimal_params = np.zeros(self._nDims)
-        optimal_params[:self._split] = (df['n'].values)[self._n_constraints.get_unfixed_indices()]
-        optimal_params[self._split:] = (df['d(nm)'].values * 1e-9)[self._d_constraints.get_unfixed_indices()]
+        # optimal_params = np.zeros(self._nDims)
+        # optimal_params[:self._split] = (df['n'].values)[self._n_constraints.get_unfixed_indices()]
+        # optimal_params[self._split:] = (df['d(nm)'].values * 1e-9)[self._d_constraints.get_unfixed_indices()]
+        optimal_n = (df['n'].values)[self._n_constraints.get_unfixed_indices()]
+        optimal_d = (df['d(nm)'].values * 1e-9)[self._d_constraints.get_unfixed_indices()]
 
         # Create array of wavelengths which will be the x-axis values in the plot.
-        wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=1000)
+        # wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=1000)
         # Get the amplitude function. Named 'amplitude_wrapper' to avoid confusion with other function defined later
         # which does the same calculation but takes different function arguments.
-        amplitude_wrapper, _ = self._build_amplitude_function()
+        # amplitude_wrapper, _ = self._build_amplitude_function()
 
         # Calculate R_s and R_p values which will be plotted on the y-axis.
-        reflectivity_s = np.array([np.abs(amplitude_wrapper(optimal_params, wavelength, 0)) ** 2 for wavelength in wavelengths])
-        reflectivity_p = np.array([np.abs(amplitude_wrapper(optimal_params, wavelength, 1)) ** 2 for wavelength in wavelengths])
-        reflectivity_sum = np.abs(reflectivity_s + reflectivity_p)
-        reflectivity_diff = np.abs(reflectivity_s - reflectivity_p)
-        reflectivity_angle = np.array([np.angle(amplitude_wrapper(optimal_params, wavelength, 0) / amplitude_wrapper(optimal_params, wavelength, 1)) for wavelength in wavelengths])
+        # reflectivity_s = np.array([np.abs(amplitude_wrapper(optimal_params, wavelength, 0)) ** 2 for wavelength in wavelengths])
+        # reflectivity_p = np.array([np.abs(amplitude_wrapper(optimal_params, wavelength, 1)) ** 2 for wavelength in wavelengths])
+        # reflectivity_sum = np.abs(reflectivity_s + reflectivity_p)
+        # reflectivity_diff = np.abs(reflectivity_s - reflectivity_p)
+        # reflectivity_angle = np.array([np.angle(amplitude_wrapper(optimal_params, wavelength, 0) / amplitude_wrapper(optimal_params, wavelength, 1)) for wavelength in wavelengths])
 
-        def calculate_robustness_analysis():
-            """Function which returns the tuple (mean, lower error bar, upper error bar) at each wavelength."""
+        # def calculate_robustness_analysis():
+        #     """Function which returns the tuple (mean, lower error bar, upper error bar) at each wavelength."""
+        #
+        #     def amplitude_new(d: np.ndarray, wavelength: float, polarisation):
+        #         # Calculate the amplitude in the case where all thicknesses are varied.
+        #         # Construct n from optimal values.
+        #         n = np.zeros(self._M)
+        #         n[self._n_constraints.get_fixed_indices()] = [n(wavelength) for n in self._n_constraints.get_fixed_values()]
+        #         n[self._n_constraints.get_unfixed_indices()] = [ns[np.int_(optimal_params[:self._split][i])](wavelength) for i, ns in
+        #                                                         enumerate(self._n_constraints.get_unfixed_values())]
+        #         return amplitude(polarisation, self._M, n, d, wavelength, self._n_outer(wavelength), self._n_substrate(wavelength), self._theta_outer)
+        #
+        #     s = self._robustness_analysis(lambda d: np.array([np.abs(amplitude_new(d, wavelength, 0)) ** 2 for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
+        #     p = self._robustness_analysis(lambda d: np.array([np.abs(amplitude_new(d, wavelength, 1)) ** 2 for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
+        #     sum = self._robustness_analysis(lambda d: np.array([(np.abs(amplitude_new(d, wavelength, 0)) ** 2 + np.abs(amplitude_new(d, wavelength, 1)) ** 2) for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
+        #     diff = self._robustness_analysis(lambda d: np.array([(np.abs(amplitude_new(d, wavelength, 0)) ** 2 - np.abs(amplitude_new(d, wavelength, 1)) ** 2) for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
+        #     angle = self._robustness_analysis(lambda d: np.array([(np.angle(amplitude_new(d, wavelength, 0) / amplitude_new(d, wavelength, 1))) for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
+        #
+        #     return s, p, sum, diff, angle
 
-            def amplitude_new(d: np.ndarray, wavelength: float, polarisation):
-                # Calculate the amplitude in the case where all thicknesses are varied.
-                # Construct n from optimal values.
-                n = np.zeros(self._M)
-                n[self._n_constraints.get_fixed_indices()] = [n(wavelength) for n in self._n_constraints.get_fixed_values()]
-                n[self._n_constraints.get_unfixed_indices()] = [ns[np.int_(optimal_params[:self._split][i])](wavelength) for i, ns in
-                                                                enumerate(self._n_constraints.get_unfixed_values())]
-                return amplitude(polarisation, self._M, n, d, wavelength, self._n_outer(wavelength), self._n_substrate(wavelength), self._theta_outer)
-
-            s = self._robustness_analysis(lambda d: np.array([np.abs(amplitude_new(d, wavelength, 0)) ** 2 for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
-            p = self._robustness_analysis(lambda d: np.array([np.abs(amplitude_new(d, wavelength, 1)) ** 2 for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
-            sum = self._robustness_analysis(lambda d: np.array([(np.abs(amplitude_new(d, wavelength, 0)) ** 2 + np.abs(amplitude_new(d, wavelength, 1)) ** 2) for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
-            diff = self._robustness_analysis(lambda d: np.array([(np.abs(amplitude_new(d, wavelength, 0)) ** 2 - np.abs(amplitude_new(d, wavelength, 1)) ** 2) for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
-            angle = self._robustness_analysis(lambda d: np.array([(np.angle(amplitude_new(d, wavelength, 0) / amplitude_new(d, wavelength, 1))) for wavelength in wavelengths]), df['d(nm)'].values * 1e-9, len(wavelengths))
-
-            return s, p, sum, diff, angle
-
-        res = calculate_robustness_analysis()
-        means_s, lower_s, upper_s = res[0]
-        means_p, lower_p, upper_p = res[1]
-        means_sum, lower_sum, upper_sum = res[2]
-        means_diff, lower_diff, upper_diff = res[3]
-        means_angle, lower_angle, upper_angle = res[4]
+        # res = calculate_robustness_analysis()
+        wavelengths, res = self.backend_calculations.robustness_analysis(optimal_n, optimal_d)
+        means_s, lower_s, upper_s = res[0, :, :]
+        means_p, lower_p, upper_p = res[1, :, :]
+        means_sum, lower_sum, upper_sum = res[2, :, :]
+        means_diff, lower_diff, upper_diff = res[3, :, :]
+        means_angle, lower_angle, upper_angle = res[4, :, :]
 
         # Plot R_s and R_p
         fig1: plt.Figure
@@ -452,17 +499,17 @@ class Optimiser:
             # Only plot the target if the user has switched on this term in the merit function. That is, do not plot
             # if the user has set self._s_pol_weighting to zero.
             ax_s.plot(wavelengths * 1e9, self._target_reflectivity_s(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
-        ax_s.plot(wavelengths * 1e9, reflectivity_s, label='Optimal reflectivity', color='red', linewidth=0.5)
+        ax_s.plot(wavelengths * 1e9, means_s, label='Optimal reflectivity', color='red', linewidth=0.5)
         # Need linewidth=0 as otherwise fill_between leaks colour (See https://github.com/matplotlib/matplotlib/issues/23764).
-        ax_s.fill_between(wavelengths * 1e9, means_s - lower_s, means_s + upper_s, alpha=0.25, color='red', linewidth=0)
+        ax_s.fill_between(wavelengths * 1e9, lower_s, upper_s, alpha=0.25, color='red', linewidth=0)
         ax_s.set_ylabel(r'$R_\mathrm{s}$')
         ax_s.set_title('Reflectivity against wavelength (s-polarisation)', fontweight='bold')
 
         if self._p_pol_weighting != 0:
             ax_p.plot(wavelengths * 1e9, self._target_reflectivity_p(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
-        ax_p.plot(wavelengths * 1e9, reflectivity_p, label='Optimal reflectivity', color='red', linewidth=0.5)
+        ax_p.plot(wavelengths * 1e9, means_p, label='Optimal reflectivity', color='red', linewidth=0.5)
         # Need linewidth=0 as otherwise fill_between leaks colour (See https://github.com/matplotlib/matplotlib/issues/23764).
-        ax_p.fill_between(wavelengths * 1e9, means_p - lower_p, means_p + upper_p, alpha=0.25, color='red', linewidth=0)
+        ax_p.fill_between(wavelengths * 1e9, lower_p, upper_p, alpha=0.25, color='red', linewidth=0)
         ax_p.set_ylabel(r'$R_\mathrm{p}$')
         ax_p.set_title('Reflectivity against wavelength (p-polarisation)', fontweight='bold')
 
@@ -476,24 +523,24 @@ class Optimiser:
         if self._sum_weighting != 0:
             ax_sum.plot(wavelengths * 1e9, self._target_sum(wavelengths), label='Target reflectivity',
                   color='blue', linewidth=0.5)
-        ax_sum.plot(wavelengths * 1e9, reflectivity_sum, label='Optimal reflectivity', color='red', linewidth=0.5)
-        ax_sum.fill_between(wavelengths * 1e9, means_sum - lower_sum, means_sum + upper_sum, alpha=0.25, color='red', linewidth=0)
+        ax_sum.plot(wavelengths * 1e9, means_sum, label='Optimal reflectivity', color='red', linewidth=0.5)
+        ax_sum.fill_between(wavelengths * 1e9, lower_sum, upper_sum, alpha=0.25, color='red', linewidth=0)
         ax_sum.set_ylabel(r'$|R_\mathrm{s} + R_\mathrm{p}|$')
         ax_sum.set_title('Sum of s- and p-reflectivities against wavelength', fontweight='bold')
 
         if self._difference_weighting != 0:
             ax_diff.plot(wavelengths * 1e9, self._target_difference(wavelengths), label='Target reflectivity',
                         color='blue', linewidth=0.5)
-        ax_diff.plot(wavelengths * 1e9, reflectivity_diff, label='Optimal reflectivity', color='red', linewidth=0.5)
-        ax_diff.fill_between(wavelengths * 1e9, means_diff - lower_diff, means_diff + upper_diff, alpha=0.25, color='red', linewidth=0)
+        ax_diff.plot(wavelengths * 1e9, means_diff, label='Optimal reflectivity', color='red', linewidth=0.5)
+        ax_diff.fill_between(wavelengths * 1e9, lower_diff, upper_diff, alpha=0.25, color='red', linewidth=0)
         ax_diff.set_ylabel(r'$|R_\mathrm{s} - R_\mathrm{p}|$')
         ax_diff.set_title('Difference of s- and p-reflectivities against wavelength', fontweight='bold')
 
         if self._phase_weighting != 0:
             ax_angle.plot(wavelengths * 1e9, self._target_relative_phase(wavelengths), label='Target phase difference',
                          color='blue', linewidth=0.5)
-        ax_angle.plot(wavelengths * 1e9, reflectivity_angle, label='Optimal phase difference', color='red', linewidth=0.5)
-        ax_angle.fill_between(wavelengths * 1e9, means_angle - lower_angle, means_angle + upper_angle, alpha=0.25, color='red', linewidth=0)
+        ax_angle.plot(wavelengths * 1e9, means_angle, label='Optimal phase difference', color='red', linewidth=0.5)
+        ax_angle.fill_between(wavelengths * 1e9, lower_angle, upper_angle, alpha=0.25, color='red', linewidth=0)
         ax_angle.set_ylabel(r'$\phi_\mathrm{s} - \phi_\mathrm{p}$ [rad]')
         ax_angle.set_title('Phase difference of s- and p-polarised light against wavelength', fontweight='bold')
 

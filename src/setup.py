@@ -25,19 +25,25 @@ else:
     string = relative_path + '/'
 # print(f'setup.py: relative_path: {string}')
 
-# Path to Cython .pyx file
-cython_path = string + 'calculation/reflectivity.pyx'
-print(f'cython file path relative to terminal working directory: {cython_path}')
+# Path to Cython .pyx files
+cython_paths = [string + s for s in ['calculation/reflectivity.pyx', 'calculation/BackendCalculations.pyx']]
+print(f'cython file path relative to terminal working directory: {cython_paths}')
 # Need dotted name for the location in which to save the .so file
-dotted_name = string.replace('/', '.') + 'calculation.reflectivity_c_file'
-print(f'dotted cython file path: {dotted_name}')
+dotted_names = [string.replace('/', '.') + s
+                for s in ['calculation.reflectivity', 'calculation.BackendCalculations_c_file']]
+print(f'dotted cython file path: {dotted_names}')
 
-extensions = [Extension(dotted_name, [cython_path])]
+extensions = [Extension(dotted_names[0], [cython_paths[0]]),
+              Extension(dotted_names[1], [cython_paths[1]])]
 
 # Compiler directives: Deactivate bounds checking, Deactivate negative indexing, No division by zero checking
 setup(
     ext_modules=cythonize(
         extensions,
-        compiler_directives={'language_level': 3, 'boundscheck': False, 'wraparound': False, 'cdivision': True}),
-    include_dirs=[numpy.get_include()]
+        compiler_directives={'language_level': 3, 'boundscheck': False, 'wraparound': False, 'cdivision': True},
+        annotate=True,
+        # force=True
+    ),
+    # Include directory './calculation' explicitly to search for .pyx and pxd files.
+    include_dirs=[numpy.get_include(), str(Path(__file__).parent / 'calculation')]
 )
