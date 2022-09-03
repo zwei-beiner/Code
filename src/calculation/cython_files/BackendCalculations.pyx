@@ -121,7 +121,7 @@ cdef class BackendCalculations:
                 self.samplers[i] = UniformSampler(d_unfixed_values[i - self.split][0], d_unfixed_values[i - self.split][1])
 
 
-        self.is_term_switched_on = np.zeros(4, dtype=np.int32)
+        self.is_term_switched_on = np.zeros(5, dtype=np.int32)
         self.is_term_switched_on[0] = 1 if (merit_function_specification.s_pol_weighting == 0.0) else 0
         self.is_term_switched_on[1] = 1 if (merit_function_specification.p_pol_weighting == 0.0) else 0
         self.is_term_switched_on[2] = 1 if (merit_function_specification.sum_weighting == 0.0) else 0
