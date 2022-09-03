@@ -61,24 +61,6 @@ class Optimiser:
         self._n_constraints = n_constraints(n_specification)
         self._d_constraints = d_constraints(d_specification)
 
-        self._s_pol_weighting = s_pol_weighting
-        self._p_pol_weighting = p_pol_weighting
-        self._sum_weighting = sum_weighting
-        self._difference_weighting = difference_weighting
-        self._phase_weighting = phase_weighting
-
-        self._target_reflectivity_s = target_reflectivity_s
-        self._target_reflectivity_p = target_reflectivity_p
-        self._target_sum = target_sum
-        self._target_difference = target_difference
-        self._target_relative_phase = target_relative_phase
-
-        self._weight_function_s = weight_function_s
-        self._weight_function_p = weight_function_p
-        self._weight_function_sum = weight_function_sum
-        self._weight_function_difference = weight_function_difference
-        self._weight_function_phase = weight_function_phase
-
         self._merit_function_specification = MeritFunctionSpecification(
             s_pol_weighting=s_pol_weighting,
             p_pol_weighting=p_pol_weighting,
@@ -155,19 +137,11 @@ class Optimiser:
         print('PolyChord run completed.')
 
 
-    def calculate_critical_thicknesses(self, optimal_n: list[RefractiveIndex]):
-        wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=100)
-        d_crit = np.zeros((self._M, len(wavelengths)))
-        for i in range(self._M):
-            n_outer = self._n_outer(wavelengths)
-            n = (optimal_n[i])(wavelengths)
-            cos_theta = np.sqrt(np.complex_(1 - (n_outer / n) ** 2 * np.sin(self._theta_outer) ** 2))
-            k_x = 2 * np.pi/wavelengths * (n / n_outer) * cos_theta
-            d_crit[i, :] = np.abs(1 / k_x)
-        return 0.01 * d_crit
+    def calculate_critical_thicknesses(self, optimal_n: np.ndarray):
+        return self.backend_calculations.calculate_critical_thicknesses(optimal_n)
 
 
-    def which_layers_can_be_taken_out(self, optimal_n: list[RefractiveIndex], optimal_d: np.ndarray) -> list[int]:
+    def which_layers_can_be_taken_out(self, optimal_n: np.ndarray, optimal_d: np.ndarray) -> list[int]:
         # Layer can be taken out for which d < d_crit for all wavelengths.
         d_crit = self.calculate_critical_thicknesses(optimal_n)
         d_crit_max = np.amax(d_crit, axis=1)
@@ -179,7 +153,7 @@ class Optimiser:
         Returns True if optimisation should be rerun with fewer layers.
         """
         df = pd.read_csv(self._root / 'optimal_parameters.csv')
-        optimal_n: list[RefractiveIndex] = self._n_constraints.get_values_from_indices(np.int_(df['n'].values).tolist())
+        optimal_n: np.ndarray = np.int_(df['n'].values)
         optimal_d: np.ndarray = df['d(nm)'].values * 1e-9
 
         indices = self.which_layers_can_be_taken_out(optimal_n, optimal_d)
@@ -189,7 +163,7 @@ class Optimiser:
 
     def plot_critical_thicknesses(self, show_plot: bool, save_plot: bool) -> tuple[plt.Figure, list[plt.Axes]]:
         df = pd.read_csv(self._root / 'optimal_parameters.csv')
-        n: list[RefractiveIndex] = self._n_constraints.get_values_from_indices(np.int_(df['n'].values).tolist())
+        n: np.ndarray = np.int_(df['n'].values)
         d_crit = self.calculate_critical_thicknesses(n)
         d: np.ndarray = df['d(nm)'].values * 1e-9
 
@@ -254,8 +228,7 @@ class Optimiser:
         d[self._d_constraints.get_fixed_indices()] = self._d_constraints.get_fixed_values()
         d[self._d_constraints.get_unfixed_indices()] = optimal_params[self._split:]
 
-        optimal_n: list[RefractiveIndex] = self._n_constraints.get_values_from_indices(n.tolist())
-        indices = self.which_layers_can_be_taken_out(optimal_n, d.tolist())
+        indices = self.which_layers_can_be_taken_out(n, d)
         true_or_false: list[bool] = [(i in indices) for i in range(self._M)]
 
         df = pd.DataFrame({'Layer': np.arange(1, self._M + 1), 'n': n, 'd(nm)': d * 1e9, 'Remove': true_or_false})
@@ -342,18 +315,18 @@ class Optimiser:
         ax_s: plt.Axes
         ax_p: plt.Axes
         fig1, (ax_s, ax_p) = plt.subplots(2, 1, figsize=(9, 6))
-        if self._s_pol_weighting != 0:
+        if self._merit_function_specification.s_pol_weighting != 0:
             # Only plot the target if the user has switched on this term in the merit function. That is, do not plot
             # if the user has set self._s_pol_weighting to zero.
-            ax_s.plot(wavelengths * 1e9, self._target_reflectivity_s(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
+            ax_s.plot(wavelengths * 1e9, self._merit_function_specification.target_reflectivity_s(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
         ax_s.plot(wavelengths * 1e9, means_s, label='Optimal reflectivity', color='red', linewidth=0.5)
         # Need linewidth=0 as otherwise fill_between leaks colour (See https://github.com/matplotlib/matplotlib/issues/23764).
         ax_s.fill_between(wavelengths * 1e9, lower_s, upper_s, alpha=0.25, color='red', linewidth=0)
         ax_s.set_ylabel(r'$R_\mathrm{s}$')
         ax_s.set_title('Reflectivity against wavelength (s-polarisation)', fontweight='bold')
 
-        if self._p_pol_weighting != 0:
-            ax_p.plot(wavelengths * 1e9, self._target_reflectivity_p(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
+        if self._merit_function_specification.p_pol_weighting != 0:
+            ax_p.plot(wavelengths * 1e9, self._merit_function_specification.target_reflectivity_p(wavelengths), label='Target reflectivity', color='blue', linewidth=0.5)
         ax_p.plot(wavelengths * 1e9, means_p, label='Optimal reflectivity', color='red', linewidth=0.5)
         # Need linewidth=0 as otherwise fill_between leaks colour (See https://github.com/matplotlib/matplotlib/issues/23764).
         ax_p.fill_between(wavelengths * 1e9, lower_p, upper_p, alpha=0.25, color='red', linewidth=0)
@@ -367,24 +340,24 @@ class Optimiser:
         ax_angle: plt.Axes
         fig2, (ax_sum, ax_diff, ax_angle) = plt.subplots(3, 1, figsize=(9, 9))
 
-        if self._sum_weighting != 0:
-            ax_sum.plot(wavelengths * 1e9, self._target_sum(wavelengths), label='Target reflectivity',
+        if self._merit_function_specification.sum_weighting != 0:
+            ax_sum.plot(wavelengths * 1e9, self._merit_function_specification.target_sum(wavelengths), label='Target reflectivity',
                   color='blue', linewidth=0.5)
         ax_sum.plot(wavelengths * 1e9, means_sum, label='Optimal reflectivity', color='red', linewidth=0.5)
         ax_sum.fill_between(wavelengths * 1e9, lower_sum, upper_sum, alpha=0.25, color='red', linewidth=0)
         ax_sum.set_ylabel(r'$|R_\mathrm{s} + R_\mathrm{p}|$')
         ax_sum.set_title('Sum of s- and p-reflectivities against wavelength', fontweight='bold')
 
-        if self._difference_weighting != 0:
-            ax_diff.plot(wavelengths * 1e9, self._target_difference(wavelengths), label='Target reflectivity',
+        if self._merit_function_specification.difference_weighting != 0:
+            ax_diff.plot(wavelengths * 1e9, self._merit_function_specification.target_difference(wavelengths), label='Target reflectivity',
                         color='blue', linewidth=0.5)
         ax_diff.plot(wavelengths * 1e9, means_diff, label='Optimal reflectivity', color='red', linewidth=0.5)
         ax_diff.fill_between(wavelengths * 1e9, lower_diff, upper_diff, alpha=0.25, color='red', linewidth=0)
         ax_diff.set_ylabel(r'$|R_\mathrm{s} - R_\mathrm{p}|$')
         ax_diff.set_title('Difference of s- and p-reflectivities against wavelength', fontweight='bold')
 
-        if self._phase_weighting != 0:
-            ax_angle.plot(wavelengths * 1e9, self._target_relative_phase(wavelengths), label='Target phase difference',
+        if self._merit_function_specification.phase_weighting != 0:
+            ax_angle.plot(wavelengths * 1e9, self._merit_function_specification.target_relative_phase(wavelengths), label='Target phase difference',
                          color='blue', linewidth=0.5)
         ax_angle.plot(wavelengths * 1e9, means_angle, label='Optimal phase difference', color='red', linewidth=0.5)
         ax_angle.fill_between(wavelengths * 1e9, lower_angle, upper_angle, alpha=0.25, color='red', linewidth=0)
@@ -496,7 +469,7 @@ class Optimiser:
 
         # Read in the optimal solution for n and d.
         df = pd.read_csv(self._root / 'optimal_parameters.csv')
-        optimal_n: list[RefractiveIndex] = self._n_constraints.get_values_from_indices(np.int_(df['n'].values).tolist())
+        optimal_n: np.ndarray = np.int_(df['n'].values)
         optimal_d: np.ndarray = df['d(nm)'].values * 1e-9
 
         # Get the indices of the layers for which the thickness is below the critical thickness.
@@ -515,19 +488,19 @@ class Optimiser:
                                   wavelengths=self._wavelengths.get_values(),
                                   n_specification=new_n_specification, # Use new specification for n
                                   d_specification=new_d_specification, # Use new specification for d
-                                  p_pol_weighting=self._p_pol_weighting,
-                                  s_pol_weighting=self._s_pol_weighting,
-                                  sum_weighting=self._sum_weighting,
-                                  difference_weighting=self._difference_weighting,
-                                  phase_weighting=self._phase_weighting,
-                                  target_reflectivity_s=self._target_reflectivity_s,
-                                  target_reflectivity_p=self._target_reflectivity_p,
-                                  target_sum=self._target_sum,
-                                  target_difference=self._target_difference,
-                                  target_relative_phase=self._target_relative_phase,
-                                  weight_function_s=self._weight_function_s,
-                                  weight_function_p=self._weight_function_p,
-                                  weight_function_sum=self._weight_function_sum,
-                                  weight_function_difference=self._weight_function_difference,
-                                  weight_function_phase=self._weight_function_phase)
+                                  p_pol_weighting=self._merit_function_specification.p_pol_weighting,
+                                  s_pol_weighting=self._merit_function_specification.s_pol_weighting,
+                                  sum_weighting=self._merit_function_specification.sum_weighting,
+                                  difference_weighting=self._merit_function_specification.difference_weighting,
+                                  phase_weighting=self._merit_function_specification.phase_weighting,
+                                  target_reflectivity_s=self._merit_function_specification.target_reflectivity_s,
+                                  target_reflectivity_p=self._merit_function_specification.target_reflectivity_p,
+                                  target_sum=self._merit_function_specification.target_sum,
+                                  target_difference=self._merit_function_specification.target_difference,
+                                  target_relative_phase=self._merit_function_specification.target_relative_phase,
+                                  weight_function_s=self._merit_function_specification.weight_function_s,
+                                  weight_function_p=self._merit_function_specification.weight_function_p,
+                                  weight_function_sum=self._merit_function_specification.weight_function_sum,
+                                  weight_function_difference=self._merit_function_specification.weight_function_difference,
+                                  weight_function_phase=self._merit_function_specification.weight_function_phase)
         return new_optimiser
