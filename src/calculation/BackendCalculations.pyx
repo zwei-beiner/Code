@@ -138,10 +138,13 @@ cdef class BackendCalculations:
     cdef long M
     cdef double theta_outer
 
-    # Array of type PrecomputedValues. Store automatically calculated wavelengths at indices (0,...,K-1). Store
-    # wavelengths for plotting at index K. Store wavelengths manually specified by user at index K+1. Hence, the array
-    # will have length K+2.
+    # Array of type PrecomputedValues. Store automatically calculated wavelengths.
     cdef object[:] precomputed_values_array
+    # Store wavelengths for plotting.
+    cdef object precomputed_values_for_plotting
+    #  Store wavelengths manually specified by user.
+    cdef object precomputed_values_manually_specified
+
     cdef double delta_D
     cdef int K_max
 
@@ -205,7 +208,7 @@ cdef class BackendCalculations:
         # print(K_max)
 
         # Fill up precomputed_values_array.
-        self.precomputed_values_array = np.empty((self.K_max + 2, ), dtype=object)
+        self.precomputed_values_array = np.empty((self.K_max, ), dtype=object)
         self.delta_D = 1. / const
         cdef int i
         cdef double[:] wavelengths
@@ -214,9 +217,10 @@ cdef class BackendCalculations:
             # print('K:', i)
             wavelengths = self.r.calculate_wavelengths(min_wavelength, max_wavelength, (i + 1.5) * self.delta_D)
             self.precomputed_values_array[i] = PrecomputedValues(self.M, n_outer, n_substrate, wavelengths, layer_specification, merit_function_specification)
-        self.precomputed_values_array[self.K_max] = PrecomputedValues(self.M, n_outer, n_substrate, np.linspace(min_wavelength, max_wavelength, num=1000), layer_specification, merit_function_specification)
+
+        self.precomputed_values_for_plotting = PrecomputedValues(self.M, n_outer, n_substrate, np.linspace(min_wavelength, max_wavelength, num=1000), layer_specification, merit_function_specification)
         if custom_wavelengths is not None:
-            self.precomputed_values_array[self.K_max + 1] = PrecomputedValues(self.M, n_outer, n_substrate, custom_wavelengths, layer_specification, merit_function_specification)
+            self.precomputed_values_manually_specified = PrecomputedValues(self.M, n_outer, n_substrate, custom_wavelengths, layer_specification, merit_function_specification)
 
         self.d_fixed_sum = np.sum(d_fixed_values)
 
@@ -308,16 +312,13 @@ cdef class BackendCalculations:
 
     cpdef double merit_function_fixed_wavelength(self, np.ndarray [double, ndim=1] params):
         """
-        Same function as 'self.merit_function_auto_wavelength()' but with K set to K_max+1, i.e. the wavelengths
-        are set to the user-defined wavelengths. 
+        Same function as 'self.merit_function_auto_wavelength()' but using the user-defined wavelengths. 
         """
 
         cdef np.ndarray[long, ndim=1] n_params = np.int_(params[:self.split])
         cdef np.ndarray[double, ndim=1] d_params = params[self.split:]
 
-        cdef int K = self.K_max + 1
-
-        cdef PrecomputedValues p = self.precomputed_values_array[K]
+        cdef PrecomputedValues p = self.precomputed_values_manually_specified
         cdef int num_wavelengths = len(p.wavelengths)
         cdef np.ndarray[complex, ndim=1] amplitude_s = np.zeros(num_wavelengths, dtype=complex)
         cdef np.ndarray[complex, ndim=1] amplitude_p = np.zeros(num_wavelengths, dtype=complex)
@@ -382,7 +383,7 @@ cdef class BackendCalculations:
         cdef np.ndarray [complex, ndim=2] amplitude_s_samples = np.zeros((num_samples, num_wavelengths), dtype=complex)
         cdef np.ndarray [complex, ndim=2] amplitude_p_samples = np.zeros((num_samples, num_wavelengths), dtype=complex)
 
-        cdef PrecomputedValues precomputed_values = self.precomputed_values_array[self.K_max]
+        cdef PrecomputedValues precomputed_values = self.precomputed_values_for_plotting
         cdef np.ndarray [complex, ndim=1] amplitude_s = np.zeros(precomputed_values.num_wavelengths, dtype=complex)
         cdef np.ndarray [complex, ndim=1] amplitude_p = np.zeros(precomputed_values.num_wavelengths, dtype=complex)
 
@@ -404,6 +405,7 @@ cdef class BackendCalculations:
             amplitude_s_samples[i, :] = amplitude_s
             amplitude_p_samples[i, :] = amplitude_p
 
+        # Map samples to reflectivities.
         cdef np.ndarray [object, ndim=1] all_samples = np.empty(5, dtype=object)
         # reflectivity_s
         all_samples[0] = np.abs(amplitude_s_samples) ** 2
