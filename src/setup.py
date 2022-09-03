@@ -29,18 +29,21 @@ else:
 cython_paths = [string + s
                 for s in ['calculation/cython_files/reflectivity.pyx',
                           'calculation/cython_files/BackendCalculations.pyx',
-                          'calculation/cython_files/Samplers.pyx']]
+                          'calculation/cython_files/Samplers.pyx',
+                          'calculation/cython_files/PrecomputedValues.pyx']]
 print(f'cython file path relative to terminal working directory: {cython_paths}')
 # Need dotted name for the location in which to save the .so file
 dotted_names = [string.replace('/', '.') + s
                 for s in ['calculation.cython_files.reflectivity_for_import',
                           'calculation.cython_files.BackendCalculations_for_import',
-                          'calculation.cython_files.Samplers_for_import']]
+                          'calculation.cython_files.Samplers_for_import',
+                          'calculation.cython_files.PrecomputedValues_for_import']]
 print(f'dotted cython file path: {dotted_names}')
 
 extensions = [Extension(dotted_names[0], [cython_paths[0]]),
               Extension(dotted_names[1], [cython_paths[1]]),
-              Extension(dotted_names[2], [cython_paths[2]])]
+              Extension(dotted_names[2], [cython_paths[2]]),
+              Extension(dotted_names[3], [cython_paths[3]])]
 
 # Compiler directives: Deactivate bounds checking, Deactivate negative indexing, No division by zero checking
 setup(
