@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from reflectivity import reflectivity_namespace
+from reflectivity_for_import import reflectivity_namespace
 r = reflectivity_namespace()
-from BackendCalculations_c_file import BackendCalculations
+from BackendCalculations_for_import import BackendCalculations
 
 from typing import Union, Callable
 

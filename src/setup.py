@@ -30,7 +30,7 @@ cython_paths = [string + s for s in ['calculation/cython_files/reflectivity.pyx'
 print(f'cython file path relative to terminal working directory: {cython_paths}')
 # Need dotted name for the location in which to save the .so file
 dotted_names = [string.replace('/', '.') + s
-                for s in ['calculation.cython_files.reflectivity', 'calculation.cython_files.BackendCalculations_c_file']]
+                for s in ['calculation.cython_files.reflectivity_for_import', 'calculation.cython_files.BackendCalculations_for_import']]
 print(f'dotted cython file path: {dotted_names}')
 
 extensions = [Extension(dotted_names[0], [cython_paths[0]]),

@@ -12,7 +12,7 @@ from pypolychord.priors import UniformPrior
 # sys.path.insert(1, '/Users/namu/Desktop/Part_II/Summer_Project/Code/src/calculation/reflectivity.pxd')
 # print(sys.path)
 # from reflectivity cimport calculate_wavelengths, amplitude, amplitude_at_wavelengths
-from reflectivity cimport reflectivity_namespace
+from reflectivity_for_import cimport reflectivity_namespace
 
 cdef class PrecomputedValues:
     cdef int M
