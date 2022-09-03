@@ -220,11 +220,19 @@ cdef class BackendCalculations:
             res = res + p.phase_weighting * np.mean(
                 ((relative_phases - p.target_relative_phase) / p.weight_function_phase) ** 2)
 
-        return p.s_pol_weighting * np.mean(((reflectivity_s - p.target_reflectivity_s) / p.weight_function_s) ** 2) + \
-               p.p_pol_weighting * np.mean(((reflectivity_p - p.target_reflectivity_p) / p.weight_function_p) ** 2) + \
-               p.sum_weighting * np.mean(((sum_of_pol - p.target_sum) / p.weight_function_sum) ** 2) + \
-               p.difference_weighting * np.mean(((diff_of_pol - p.target_difference) / p.weight_function_difference) ** 2) + \
-               p.phase_weighting * np.mean(((relative_phases - p.target_relative_phase) / p.weight_function_phase) ** 2)
+        return res
+
+        # cdef np.ndarray [double, ndim=1] reflectivity_s = np.abs(amplitude_s) ** 2
+        # cdef np.ndarray [double, ndim=1] reflectivity_p = np.abs(amplitude_p) ** 2
+        # cdef np.ndarray [double, ndim=1] relative_phases = np.angle(amplitude_s / amplitude_p)
+        # cdef np.ndarray [double, ndim=1] sum_of_pol = np.abs(reflectivity_s + reflectivity_p)
+        # cdef np.ndarray [double, ndim=1] diff_of_pol = np.abs(reflectivity_s - reflectivity_p)
+        #
+        # return p.s_pol_weighting * np.mean(((reflectivity_s - p.target_reflectivity_s) / p.weight_function_s) ** 2) + \
+        #        p.p_pol_weighting * np.mean(((reflectivity_p - p.target_reflectivity_p) / p.weight_function_p) ** 2) + \
+        #        p.sum_weighting * np.mean(((sum_of_pol - p.target_sum) / p.weight_function_sum) ** 2) + \
+        #        p.difference_weighting * np.mean(((diff_of_pol - p.target_difference) / p.weight_function_difference) ** 2) + \
+        #        p.phase_weighting * np.mean(((relative_phases - p.target_relative_phase) / p.weight_function_phase) ** 2)
 
 
     cpdef double merit_function_fixed_wavelength(self, np.ndarray [double, ndim=1] params):
