@@ -315,8 +315,7 @@ cdef class BackendCalculations:
 
 
 
-    cpdef np.ndarray [double, ndim=3] robustness_analysis(
-            self, np.ndarray [long, ndim=1] optimal_n, np.ndarray [double, ndim=1] optimal_d):
+    cpdef object robustness_analysis(self, np.ndarray [long, ndim=1] optimal_n, np.ndarray [double, ndim=1] optimal_d):
         cdef int num_samples = 1000
         cdef int num_wavelengths = 1000
         cdef object rng = np.random.default_rng()
@@ -378,16 +377,16 @@ cdef class BackendCalculations:
 
     cpdef np.ndarray [double, ndim=2] calculate_critical_thicknesses(self, np.ndarray [long, ndim=1] optimal_n):
         cdef PrecomputedValues p = self.precomputed_values_for_plotting
-        cdef np.ndarray [double, ndim=1] wavelengths = p.wavelengths
+        cdef np.ndarray [double, ndim=1] wavelengths = np.asarray(p.wavelengths)
         cdef np.ndarray [double, ndim=2] d_crit = np.zeros((self.M, len(wavelengths)), dtype=np.float_)
-        cdef np.ndarray [double, ndim=1] n_outer = p.n_outer
+        cdef np.ndarray [double, ndim=1] n_outer = np.asarray(p.n_outer)
 
         cdef int i
         cdef np.ndarray [double, ndim=1] n
         cdef np.ndarray [complex, ndim=1] cos_theta
         cdef np.ndarray [complex, ndim=1] k_x
         for i in range(self.M):
-            n = p.ns[i][optimal_n[i]]
+            n = np.float64(p.ns[i][optimal_n[i]])
             cos_theta = np.sqrt(np.complex_(1 - (n_outer / n) ** 2 * np.sin(self.theta_outer) ** 2))
             k_x = 2 * np.pi / wavelengths * (n / n_outer) * cos_theta
             d_crit[i, :] = np.abs(1 / k_x)
