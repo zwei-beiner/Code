@@ -26,11 +26,11 @@ else:
 # print(f'setup.py: relative_path: {string}')
 
 # Path to Cython .pyx files
-cython_paths = [string + s for s in ['calculation/reflectivity.pyx', 'calculation/BackendCalculations.pyx']]
+cython_paths = [string + s for s in ['calculation/cython_files/reflectivity.pyx', 'calculation/cython_files/BackendCalculations.pyx']]
 print(f'cython file path relative to terminal working directory: {cython_paths}')
 # Need dotted name for the location in which to save the .so file
 dotted_names = [string.replace('/', '.') + s
-                for s in ['calculation.reflectivity', 'calculation.BackendCalculations_c_file']]
+                for s in ['calculation.cython_files.reflectivity', 'calculation.cython_files.BackendCalculations_c_file']]
 print(f'dotted cython file path: {dotted_names}')
 
 extensions = [Extension(dotted_names[0], [cython_paths[0]]),
@@ -45,5 +45,5 @@ setup(
         # force=True
     ),
     # Include directory './calculation' explicitly to search for .pyx and pxd files.
-    include_dirs=[numpy.get_include(), str(Path(__file__).parent / 'calculation')]
+    include_dirs=[numpy.get_include(), str(Path(__file__).parent / 'calculation' / 'cython_files')]
 )
