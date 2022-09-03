@@ -278,12 +278,7 @@ cdef class BackendCalculations:
             res = res + p.phase_weighting * np.mean(
                 ((relative_phases - p.target_relative_phase) / p.weight_function_phase) ** 2)
 
-        return p.s_pol_weighting * np.mean(((reflectivity_s - p.target_reflectivity_s) / p.weight_function_s) ** 2) + \
-               p.p_pol_weighting * np.mean(((reflectivity_p - p.target_reflectivity_p) / p.weight_function_p) ** 2) + \
-               p.sum_weighting * np.mean(((sum_of_pol - p.target_sum) / p.weight_function_sum) ** 2) + \
-               p.difference_weighting * np.mean(
-            ((diff_of_pol - p.target_difference) / p.weight_function_difference) ** 2) + \
-               p.phase_weighting * np.mean(((relative_phases - p.target_relative_phase) / p.weight_function_phase) ** 2)
+        return res
 
 
     cpdef np.ndarray [double, ndim=1] prior(self, np.ndarray [double, ndim=1] unit_cube):
