@@ -41,6 +41,13 @@ cdef class BackendCalculations:
 
     cdef object[:] samplers
 
+    # Int array which acts as a boolean array and stores whether weighting factors are zero.
+    # Used in merit function calculation.
+    # If entry is 1, interpret as True. If entry is 0, interpret as false.
+    # Note: An int array must be used because boolean memoryviews are not supported in Cython.
+    # (See https://stackoverflow.com/questions/49058191/boolean-numpy-arrays-with-cython)
+    cdef int[:] is_term_switched_on
+
     cdef object r
 
     def __init__(self, long M, object n_outer, object n_substrate, double theta_outer, double D_max, double min_wavelength, double max_wavelength,
@@ -113,6 +120,14 @@ cdef class BackendCalculations:
             else:
                 self.samplers[i] = UniformSampler(d_unfixed_values[i - self.split][0], d_unfixed_values[i - self.split][1])
 
+
+        self.is_term_switched_on = np.zeros(4, dtype=np.int32)
+        self.is_term_switched_on[0] = 1 if (merit_function_specification.s_pol_weighting == 0.0) else 0
+        self.is_term_switched_on[1] = 1 if (merit_function_specification.p_pol_weighting == 0.0) else 0
+        self.is_term_switched_on[2] = 1 if (merit_function_specification.sum_weighting == 0.0) else 0
+        self.is_term_switched_on[3] = 1 if (merit_function_specification.difference_weighting == 0.0) else 0
+        self.is_term_switched_on[4] = 1 if (merit_function_specification.phase_weighting == 0.0) else 0
+
         # samplers = [Utils.categorical_sampler(n_unfixed_values[i]) for i in range(0, split)] + [
         #     Utils.uniform_sampler(*d_unfixed_values[i]) for i in range(0, nDims - split)]
 
@@ -178,11 +193,32 @@ cdef class BackendCalculations:
         # Fill amplitude_s and amplitde_p arrays.
         self.amplitude_wrapper(p, n_params, d_params, amplitude_s, amplitude_p)
 
-        cdef np.ndarray [double, ndim=1] reflectivity_s = np.abs(amplitude_s) ** 2
-        cdef np.ndarray [double, ndim=1] reflectivity_p = np.abs(amplitude_p) ** 2
-        cdef np.ndarray [double, ndim=1] relative_phases = np.angle(amplitude_s / amplitude_p)
-        cdef np.ndarray [double, ndim=1] sum_of_pol = np.abs(reflectivity_s + reflectivity_p)
-        cdef np.ndarray [double, ndim=1] diff_of_pol = np.abs(reflectivity_s - reflectivity_p)
+        cdef double res = 0
+        cdef np.ndarray[double, ndim=1] reflectivity_s
+        cdef np.ndarray[double, ndim=1] reflectivity_p
+        cdef np.ndarray[double, ndim=1] sum_of_pol
+        cdef np.ndarray[double, ndim=1] diff_of_pol
+        cdef np.ndarray[double, ndim=1] relative_phases
+        if self.is_term_switched_on[0] == 0:
+            reflectivity_s = np.abs(amplitude_s) ** 2
+            res = res + p.s_pol_weighting * np.mean(
+                ((reflectivity_s - p.target_reflectivity_s) / p.weight_function_s) ** 2)
+        if self.is_term_switched_on[1] == 0:
+            reflectivity_p = np.abs(amplitude_p) ** 2
+            res = res + p.p_pol_weighting * np.mean(
+                ((reflectivity_p - p.target_reflectivity_p) / p.weight_function_p) ** 2)
+        if self.is_term_switched_on[2] == 0:
+            sum_of_pol = np.abs(np.abs(amplitude_s) ** 2 + np.abs(amplitude_p) ** 2)
+            res = res + p.sum_weighting * np.mean(
+                ((sum_of_pol - p.target_sum) / p.weight_function_sum) ** 2)
+        if self.is_term_switched_on[3] == 0:
+            diff_of_pol = np.abs(np.abs(amplitude_s) ** 2 - np.abs(amplitude_p) ** 2)
+            res = res + p.difference_weighting * np.mean(
+                ((diff_of_pol - p.target_difference) / p.weight_function_difference) ** 2)
+        if self.is_term_switched_on[4] == 0:
+            relative_phases = np.angle(amplitude_s / amplitude_p)
+            res = res + p.phase_weighting * np.mean(
+                ((relative_phases - p.target_relative_phase) / p.weight_function_phase) ** 2)
 
         return p.s_pol_weighting * np.mean(((reflectivity_s - p.target_reflectivity_s) / p.weight_function_s) ** 2) + \
                p.p_pol_weighting * np.mean(((reflectivity_p - p.target_reflectivity_p) / p.weight_function_p) ** 2) + \
@@ -207,11 +243,32 @@ cdef class BackendCalculations:
         # Fill amplitude_s and amplitde_p arrays.
         self.amplitude_wrapper(p, n_params, d_params, amplitude_s, amplitude_p)
 
-        cdef np.ndarray[double, ndim=1] reflectivity_s = np.abs(amplitude_s) ** 2
-        cdef np.ndarray[double, ndim=1] reflectivity_p = np.abs(amplitude_p) ** 2
-        cdef np.ndarray[double, ndim=1] relative_phases = np.angle(amplitude_s / amplitude_p)
-        cdef np.ndarray[double, ndim=1] sum_of_pol = np.abs(reflectivity_s + reflectivity_p)
-        cdef np.ndarray[double, ndim=1] diff_of_pol = np.abs(reflectivity_s - reflectivity_p)
+        cdef double res = 0
+        cdef np.ndarray[double, ndim=1] reflectivity_s
+        cdef np.ndarray[double, ndim=1] reflectivity_p
+        cdef np.ndarray[double, ndim=1] sum_of_pol
+        cdef np.ndarray[double, ndim=1] diff_of_pol
+        cdef np.ndarray[double, ndim=1] relative_phases
+        if self.is_term_switched_on[0] == 0:
+            reflectivity_s = np.abs(amplitude_s) ** 2
+            res = res + p.s_pol_weighting * np.mean(
+                ((reflectivity_s - p.target_reflectivity_s) / p.weight_function_s) ** 2)
+        if self.is_term_switched_on[1] == 0:
+            reflectivity_p = np.abs(amplitude_p) ** 2
+            res = res + p.p_pol_weighting * np.mean(
+                ((reflectivity_p - p.target_reflectivity_p) / p.weight_function_p) ** 2)
+        if self.is_term_switched_on[2] == 0:
+            sum_of_pol = np.abs(np.abs(amplitude_s) ** 2 + np.abs(amplitude_p) ** 2)
+            res = res + p.sum_weighting * np.mean(
+                ((sum_of_pol - p.target_sum) / p.weight_function_sum) ** 2)
+        if self.is_term_switched_on[3] == 0:
+            diff_of_pol = np.abs(np.abs(amplitude_s) ** 2 - np.abs(amplitude_p) ** 2)
+            res = res + p.difference_weighting * np.mean(
+                ((diff_of_pol - p.target_difference) / p.weight_function_difference) ** 2)
+        if self.is_term_switched_on[4] == 0:
+            relative_phases = np.angle(amplitude_s / amplitude_p)
+            res = res + p.phase_weighting * np.mean(
+                ((relative_phases - p.target_relative_phase) / p.weight_function_phase) ** 2)
 
         return p.s_pol_weighting * np.mean(((reflectivity_s - p.target_reflectivity_s) / p.weight_function_s) ** 2) + \
                p.p_pol_weighting * np.mean(((reflectivity_p - p.target_reflectivity_p) / p.weight_function_p) ** 2) + \
