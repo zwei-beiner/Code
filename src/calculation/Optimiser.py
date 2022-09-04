@@ -7,6 +7,7 @@ from BackendCalculations_for_import import BackendCalculations
 from typing import Union, Callable
 
 import anesthetic
+import anesthetic.kde
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -170,7 +171,7 @@ class Optimiser:
         fig: plt.Figure
         nrows = np.int_(np.floor(np.sqrt(self._M)))
         ncols = int(self._M // nrows + (1 if self._M % nrows != 0 else 0))
-        fig, axes = plt.subplots(nrows, ncols, figsize=(9, 6))
+        fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3 * nrows))
         for i, ax in enumerate(fig.axes):
             if i < self._M:
                 ax: plt.Axes
@@ -431,7 +432,7 @@ class Optimiser:
         # necessary to fit in all the subplots, accounting for the case where self._nDim is not a square number.
         nrows = np.int_(np.floor(np.sqrt(self._nDims)))
         ncols = int(self._nDims // nrows + (1 if self._nDims % nrows != 0 else 0))
-        fig, axes = plt.subplots(nrows, ncols, figsize=(9, 6))
+        fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3 * nrows))
         # Loop through all the subplots in the Figure object.
         for i, ax in enumerate(fig.axes):
             ax: plt.Axes
@@ -456,12 +457,13 @@ class Optimiser:
                 # Get the ith column from the data frame, which are the ith parameter values of the dead points. Convert
                 # the unit 'meter' to 'nanometers'.
                 data = dataframe[i].values * 1e9
-                # Plot a histogram with the bin widths set automatically because the thickness is a continuous variable.
-                ax.hist(data)
+                # Plot a kernel density estimate (kde) of the probability distribution.
+                x, p, _, _ = anesthetic.kde.fastkde_1d(data, np.amin(data), np.amax(data))
+                ax.plot(x, p)
             else:
                 # Don't show remaining empty plots.
                 ax.axis('off')
-        fig.suptitle('Histograms of parameter samples after PolyChord run', fontweight='bold')
+        fig.suptitle('Distributions of parameter samples after PolyChord run', fontweight='bold')
         fig.tight_layout()
 
         if show_plot:
