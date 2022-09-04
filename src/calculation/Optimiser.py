@@ -198,13 +198,37 @@ class Optimiser:
         return fig, axes
 
 
+    def _get_max_row_id(self) -> int:
+        """
+        Returns n_dead.
+
+        @param dataframe: Weighted dataframe returned by anesthetic package.
+        """
+        row_id = -1
+        with open(str(self._root / 'polychord_output' / 'test.resume')) as f:
+            for i, line in enumerate(f):
+                if i == 5:
+                    row_id = int(line)
+                    break
+
+        if row_id == -1:
+            raise ValueError('No n_dead found in test.resume.')
+
+        return row_id
+
+
     def run_local_optimisation(self):
         dataframe = anesthetic.NestedSamples(root=str(self._root / 'polychord_output/test'))
 
-        max_id = dataframe['logL'].idxmax()[0]
-        # print(max_id)
-        max_row = dataframe.iloc[[max_id]]
-        # print(max_row)
+        # Restrict dataframe up to where last iteration of PolyChord was performed.
+        # This is important in case PolyChord did not finish writing to the file so that remaining lines in the
+        # dataframe can be corrupted.
+        row_id = self._get_max_row_id()
+        dataframe_up_to_max_row = dataframe.iloc[:(row_id + 1), :]
+
+        # Look for the point with the largest value of 'logL' and store the parameters in 'params'.
+        max_id = dataframe_up_to_max_row['logL'].idxmax()[0]
+        max_row = dataframe_up_to_max_row.iloc[[max_id]]
         params = max_row.loc[:, 0:(self._nDims - 1)].values.flatten()
 
         # merit_function, _ = self._build_merit_function_and_prior()
@@ -249,7 +273,9 @@ class Optimiser:
 
         dataframe = anesthetic.NestedSamples(root=str(self._root / 'polychord_output/test'))
 
-        merit_function_values = -dataframe['logL'].values
+        row_id = self._get_max_row_id()
+
+        merit_function_values = -dataframe['logL'].iloc[:(row_id + 1)].values
         x = np.arange(len(merit_function_values))
 
         fig: plt.Figure
