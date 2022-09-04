@@ -442,7 +442,7 @@ class Optimiser:
             # is a refractive index n.
             if i < self._split:
                 # Set the title as n_{which layer does this refractive index belong to?}.
-                ax.set_xlabel(r'$n_\mathrm{' + str(self._n_constraints.get_unfixed_indices()[i]) + '}$')
+                ax.set_xlabel(r'$n_\mathrm{' + str(self._n_constraints.get_unfixed_indices()[i] + 1) + '}$')
                 # Get the ith column from the data frame, which are the ith parameter values of the dead points and cast
                 # them to integers.
                 data = np.int_(dataframe[i].values)
@@ -453,7 +453,7 @@ class Optimiser:
             # For i > self._split, the parameter is a thickness d.
             elif i < self._nDims:
                 # Set the title as d_{which layer does this thickness belong to?}.
-                ax.set_xlabel(r'$d_\mathrm{' + str(self._d_constraints.get_unfixed_indices()[i - self._split]) + '}$ [nm]')
+                ax.set_xlabel(r'$d_\mathrm{' + str(self._d_constraints.get_unfixed_indices()[i - self._split] + 1) + '}$ [nm]')
                 # Get the ith column from the data frame, which are the ith parameter values of the dead points. Convert
                 # the unit 'meter' to 'nanometers'.
                 data = dataframe[i].values * 1e9
