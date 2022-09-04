@@ -144,7 +144,7 @@ class Optimiser:
     def which_layers_can_be_taken_out(self, optimal_n: np.ndarray, optimal_d: np.ndarray) -> list[int]:
         # Layer can be taken out for which d < d_crit for all wavelengths.
         d_crit = self.calculate_critical_thicknesses(optimal_n)
-        d_crit_max = np.amax(d_crit, axis=1)
+        d_crit_max = np.amin(d_crit, axis=1)
         return np.argwhere(optimal_d < d_crit_max).flatten().tolist()
 
 
