@@ -42,7 +42,7 @@ class n_constraints:
     def get_unfixed_values(self):
         return list(map(lambda f: f.value, filter(lambda c: type(c) is not FixedConstraint, self._n)))
 
-    def get_values_from_indices(self, indices: list[int]):
+    def get_values_from_indices(self, indices: list[int]) -> list[RefractiveIndex]:
         res: list[RefractiveIndex] = []
         for n, i in zip(self._n, indices):
             if type(n) is FixedConstraint:
@@ -59,7 +59,7 @@ class n_constraints:
     def get_unfixed_indices(self) -> list[int]:
         return self._unfixed_indices
 
-    def get_specification(self):
+    def get_specification(self) -> tuple[tuple[str, Union[RefractiveIndex, list[RefractiveIndex]]], ...]:
         return self._specification
 
 class d_constraints:

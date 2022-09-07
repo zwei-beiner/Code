@@ -87,7 +87,7 @@ class Optimiser:
 
         D_max: float = self._d_constraints.get_D_max()
         min_wavelength, max_wavelength = self._wavelengths.get_min_max()
-        layer_specification = tuple(
+        layer_specification: tuple[list[RefractiveIndex], ...] = tuple(
             val if (type(val) is list) else [val] for _, val in self._n_constraints.get_specification())
 
         self.backend_calculations = BackendCalculations(
