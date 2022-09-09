@@ -216,7 +216,7 @@ cdef class BackendCalculations:
             res = res + p.difference_weighting * np.mean(
                 ((diff_of_pol - p.target_difference) / p.weight_function_difference) ** 2)
         if self.is_term_switched_on[4] == 0:
-            relative_phases = np.angle(amplitude_s / amplitude_p)
+            relative_phases = np.unwrap(np.angle(amplitude_s / amplitude_p))
             res = res + p.phase_weighting * np.mean(
                 ((relative_phases - p.target_relative_phase) / p.weight_function_phase) ** 2)
 
@@ -274,7 +274,7 @@ cdef class BackendCalculations:
             res = res + p.difference_weighting * np.mean(
                 ((diff_of_pol - p.target_difference) / p.weight_function_difference) ** 2)
         if self.is_term_switched_on[4] == 0:
-            relative_phases = np.angle(amplitude_s / amplitude_p)
+            relative_phases = np.unwrap(np.angle(amplitude_s / amplitude_p))
             res = res + p.phase_weighting * np.mean(
                 ((relative_phases - p.target_relative_phase) / p.weight_function_phase) ** 2)
 
@@ -335,7 +335,7 @@ cdef class BackendCalculations:
         values[1, :] = np.abs(amplitude_p) ** 2
         values[2, :] = np.abs(values[0] + values[1])
         values[3, :] = np.abs(values[0] - values[1])
-        values[4, :] = np.angle(amplitude_s / amplitude_p)
+        values[4, :] = np.unwrap(np.angle(amplitude_s / amplitude_p))
 
         # Map samples to amplitudes.
         cdef int i
@@ -357,7 +357,7 @@ cdef class BackendCalculations:
         # reflectivity_diff
         all_samples[3] = np.abs(all_samples[0] - all_samples[1])
         # phase_difference
-        all_samples[4] = np.angle(amplitude_s_samples / amplitude_p_samples)
+        all_samples[4] = np.unwrap(np.angle(amplitude_s_samples / amplitude_p_samples), axis=1)
 
         # First index: select (0) reflectivity_s (1) reflectivity_p (2) reflectivity_sum (3) reflectivity_diff
         # (4) phase_difference. Second index: select (0) values at optimal_d (1) lower (2) upper.
