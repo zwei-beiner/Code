@@ -222,7 +222,49 @@ class Optimiser:
         return row_id
 
 
-    def run_local_optimisation(self):
+    def _locally_minimise(self, initial_guess: np.ndarray) -> tuple[np.ndarray, float]:
+        # merit_function, _ = self._build_merit_function_and_prior()
+        merit_function = lambda params: -((self._build_likelihood_and_prior()[0])(params)[0])
+
+        bounds = [(0, (len(val) - 1) + 0.9) for val in
+                  self._n_constraints.get_unfixed_values()] + self._d_constraints.get_unfixed_values()
+
+        def wrapped_merit_function(params: np.ndarray) -> float:
+            split = len(self._n_constraints.get_unfixed_indices())
+            params[:split] = np.floor(params[:split])
+            return merit_function(params)
+
+        res: scipy.optimize.OptimizeResult = scipy.optimize.minimize(wrapped_merit_function, initial_guess,
+                                                                     method='Nelder-Mead', bounds=bounds)
+        optimal_params = res.x
+        optimal_merit_function_value = res.fun
+
+        # Cast refractive index variables to integers.
+        optimal_params[:self._split] = np.floor(optimal_params[:self._split])
+
+        return optimal_params, optimal_merit_function_value
+
+
+    def _write_to_file(self, optimal_params: np.ndarray, optimal_merit_function_value: float, root: Path) -> None:
+        n = np.zeros(self._M, dtype=np.int_)
+        n[self._n_constraints.get_fixed_indices()] = 0
+        n[self._n_constraints.get_unfixed_indices()] = np.int_(optimal_params[:self._split])
+
+        d = np.zeros(self._M)
+        d[self._d_constraints.get_fixed_indices()] = self._d_constraints.get_fixed_values()
+        d[self._d_constraints.get_unfixed_indices()] = optimal_params[self._split:]
+
+        indices = self.which_layers_can_be_taken_out(n, d)
+        true_or_false: list[bool] = [(i in indices) for i in range(self._M)]
+
+        df = pd.DataFrame({'Layer': np.arange(1, self._M + 1), 'n': n, 'd(nm)': d * 1e9, 'Remove': true_or_false})
+        df.to_csv(root / 'optimal_parameters.csv', index=False)
+
+        with open(root / 'optimal_merit_function_value.txt', 'w') as f:
+            f.write(str(optimal_merit_function_value))
+
+
+    def run_local_optimisation(self) -> None:
         dataframe = anesthetic.NestedSamples(root=str(self._root / 'polychord_output/test'))
 
         # Restrict dataframe up to where last iteration of PolyChord was performed.
@@ -236,38 +278,13 @@ class Optimiser:
         max_row = dataframe_up_to_max_row.iloc[[max_id]]
         params = max_row.loc[:, 0:(self._nDims - 1)].values.flatten()
 
-        # merit_function, _ = self._build_merit_function_and_prior()
-        merit_function = lambda params: -((self._build_likelihood_and_prior()[0])(params)[0])
-
-        bounds = [(0, (len(val) - 1) + 0.9) for val in self._n_constraints.get_unfixed_values()] + self._d_constraints.get_unfixed_values()
-        def wrapped_merit_function(params: np.ndarray) -> float:
-            split = len(self._n_constraints.get_unfixed_indices())
-            params[:split] = np.floor(params[:split])
-            return merit_function(params)
-        res: scipy.optimize.OptimizeResult = scipy.optimize.minimize(wrapped_merit_function, params, method='Nelder-Mead', bounds=bounds)
-        optimal_params = res.x
-        optimal_merit_function_value = res.fun
+        optimal_params, optimal_merit_function_value = self._locally_minimise(params)
 
         # Write to file
-        n = np.zeros(self._M, dtype=np.int_)
-        n[self._n_constraints.get_fixed_indices()] = 0
-        n[self._n_constraints.get_unfixed_indices()] = np.int_(optimal_params[:self._split])
-
-        d = np.zeros(self._M)
-        d[self._d_constraints.get_fixed_indices()] = self._d_constraints.get_fixed_values()
-        d[self._d_constraints.get_unfixed_indices()] = optimal_params[self._split:]
-
-        indices = self.which_layers_can_be_taken_out(n, d)
-        true_or_false: list[bool] = [(i in indices) for i in range(self._M)]
-
-        df = pd.DataFrame({'Layer': np.arange(1, self._M + 1), 'n': n, 'd(nm)': d * 1e9, 'Remove': true_or_false})
-        df.to_csv(self._root / 'optimal_parameters.csv', index=False)
-
-        with open(self._root / 'optimal_merit_function_value.txt', 'w') as f:
-            f.write(str(optimal_merit_function_value))
+        self._write_to_file(optimal_params, optimal_merit_function_value, self._root)
 
 
-    def plot_merit_function(self, show_plot: bool, save_plot: bool) -> tuple[plt.Figure, plt.Axes]:
+    def plot_merit_function(self, show_plot: bool, save_plot: bool) -> None:
         """
         Plot how the merit function decreases during a PolyChord run.
         More precisely, the merit function value of each dead point is plotted, which is the largest merit function
@@ -314,7 +331,7 @@ class Optimiser:
         # return fig, ax
 
 
-    def plot_reflectivity(self, show_plot: bool, save_plot: bool) -> tuple[tuple[plt.Figure, list[plt.Axes]], ...]:
+    def plot_reflectivity(self, show_plot: bool, save_plot: bool, root: Path) -> None:
         """
         Plot R_s and R_p as a function of wavelength for the optimal solution.
         Must be run after run_local_optimiser() has finished running.
@@ -325,7 +342,7 @@ class Optimiser:
         """
 
         # Create array containg the optimal solution (indices of which n's to pick and values of d)
-        df = pd.read_csv(self._root / 'optimal_parameters.csv')
+        df = pd.read_csv(root / 'optimal_parameters.csv')
         optimal_n = (df['n'].values)[self._n_constraints.get_unfixed_indices()]
         optimal_d = (df['d(nm)'].values * 1e-9)[self._d_constraints.get_unfixed_indices()]
 
