@@ -14,6 +14,7 @@ import pandas as pd
 import pypolychord
 import scipy.stats
 import scipy.optimize
+from mpi4py import MPI
 
 from Utils import Utils
 from WrapperClasses import RefractiveIndex, Wavelength_constraint, n_constraints, d_constraints
@@ -571,10 +572,17 @@ class Optimiser:
         all_min_points: list[np.ndarray] = []
         all_min_points_logL: list[np.ndarray] = []
 
+        # Total number of iterations at which clustering should be done.
+        # Iterations are at 'i * nlive' which corresponds to a parameter space volume compression of 1/e.
         num_iterations = self._get_max_row_id() // self.settings.nlive
-        print(num_iterations)
-        for i in range(num_iterations):
-        # for i in [0]:
+
+        # Split the iterations among nprocs. Each processor does the clustering on a different iteration of PolyChord.
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        nprocs = comm.Get_size()
+        subarray = np.array_split(np.arange(num_iterations), nprocs)[rank]
+
+        for i in subarray:
             live_points = dataframe.live_points(i * self.settings.nlive)
             # Get live points at this iteration.
             X = live_points.loc[:, 0:(self._nDims - 1)].values
@@ -588,12 +596,6 @@ class Optimiser:
             m = pairwise_distances(X, metric=dist)
             # Run clustering.
             hdbscan.fit(m)
-            print(hdbscan.labels_)
-
-            # from sklearn.manifold import TSNE
-            # projection = TSNE(metric='precomputed').fit_transform(m)
-            # plt.scatter(*projection.T)
-            # plt.show()
 
             # Get cluster labels.
             clusters = np.unique(hdbscan.labels_)
@@ -616,8 +618,6 @@ class Optimiser:
                 index = np.argmax(logL_in_cluster)
                 min_points[i] = points_in_cluster[index]
                 min_points_logL[i] = logL_in_cluster[index]
-            # min_points = np.array(min_points)
-            # min_points_logL = np.array(min_points_logL)
 
             # Run local minimiser from all collected min_points.
             for i, point in enumerate(min_points):
@@ -632,9 +632,15 @@ class Optimiser:
             all_min_points_logL.append(min_points_logL)
 
         # Merge all 2D arrays into a single 2D array containing all points.
-        optimal_points = np.vstack(all_min_points)
+        optimal_points = comm.allgather(all_min_points)
+        # if rank == 0:
+        optimal_points = [item for sublist in optimal_points for item in sublist]
+        optimal_points = np.vstack(optimal_points)
         # Merge all 1D arrays into a single 1D array.
-        optimal_merit_function_values = np.hstack(all_min_points_logL)
+        optimal_merit_function_values = comm.allgather(all_min_points_logL)
+        # if rank == 0:
+        optimal_merit_function_values = [item for sublist in optimal_merit_function_values for item in sublist]
+        optimal_merit_function_values = np.hstack(optimal_merit_function_values)
 
         # Remove duplicates. Assuming that the clustering is good and does not produce duplicates, duplicates can
         # arise from detecting the same cluster at different PolyChord iterations.
@@ -653,7 +659,6 @@ class Optimiser:
                             indices_to_drop.append(j)
             return indices_to_drop
         indices_to_drop = remove_duplicates(optimal_points)
-        print(indices_to_drop)
         optimal_points = np.delete(optimal_points, indices_to_drop, axis=0)
         optimal_merit_function_values = np.delete(optimal_merit_function_values, indices_to_drop, axis=0)
 
@@ -662,24 +667,13 @@ class Optimiser:
         optimal_points = optimal_points[indices]
         optimal_merit_function_values = optimal_merit_function_values[indices]
 
-        # # Run local minimiser from all collected min_points.
-        # optimal_points = np.zeros((len(min_points), self._nDims), dtype=np.float64)
-        # optimal_merit_function_values = np.zeros(len(min_points), dtype=np.float64)
-        # for i, point in enumerate(min_points):
-        #     optimal_params, optimal_merit_function_value = self._locally_minimise(point)
-        #     optimal_points[i] = optimal_params
-        #     optimal_merit_function_values[i] = optimal_merit_function_value
-
-        # # Sort according to increasing values of logL, i.e. the best solution is at index 0.
-        # indices = np.argsort(optimal_merit_function_values)
-        # optimal_points = optimal_points[indices]
-        # optimal_merit_function_values = optimal_merit_function_values[indices]
-
-        number_of_writes = len(optimal_points) if len(optimal_points) < 20 else 20
-        print(f'Found {len(optimal_points)} local minima. Saving the {number_of_writes} best local minima.')
-
+        # Split the writing to files among nprocs. Each processor saves some results. The writing of each result to
+        # disk is independent of all the others, i.e. it is embarrassingly parallel.
+        indices = np.arange(len(optimal_points))
+        indices = np.array_split(indices, nprocs)[rank]
+        print(f'Found {len(optimal_points)} local minima. Worker {rank}: Saving minima {indices}')
         # Write to files and create plots.
-        for i in range(number_of_writes):
+        for i in indices:
             root = self._root / 'local_minima' / f'local_minimum_{i}'
             root.mkdir(parents=True, exist_ok=True)
             self._write_to_file(optimal_points[i], optimal_merit_function_values[i], root)

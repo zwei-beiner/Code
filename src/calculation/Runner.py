@@ -64,12 +64,16 @@ class Runner:
 
                 # Run global optimisation with PolyChord.
                 self._optimiser.run_global_optimisation()
+
                 # Do post-processing on PolyChord output using a single process.
                 if rank == 0:
                     self._optimiser.run_local_optimisation()
                     self._optimiser.make_all_plots()
-                    self._optimiser.do_clustering()
 
+                # Synchronise processes.
+                comm.barrier()
+                # Clustering uses all processors.
+                self._optimiser.do_clustering()
                 # Synchronise processes.
                 comm.barrier()
 
