@@ -1,7 +1,7 @@
 cdef class CategoricalSampler:
-    cdef object ppf
+    cdef double length
 
-    cpdef int sample(self, double x)
+    cpdef double sample(self, double x)
 
 
 cdef class UniformSampler:
