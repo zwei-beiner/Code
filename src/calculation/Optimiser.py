@@ -441,7 +441,7 @@ class Optimiser:
 
         @param show_plot: Whether to display the plot in a new matplotlib window. If True, plt.show() is called.
         """
-
+        # TODO: This plots the distribution of the dead points. Perhaps plot the live points of the last iteration instead?
 
         dataframe = anesthetic.NestedSamples(root=str(self._root / 'polychord_output/test'))
 
