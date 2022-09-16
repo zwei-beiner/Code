@@ -55,7 +55,7 @@ cdef class PrecomputedValues:
         cdef int i
         for i in range(len(layer_specification)):
             layer = layer_specification[i]
-            self.ns[i] = np.array([n(self.wavelengths) for n in layer], dtype=object)
+            self.ns[i] = np.array([n(np.asarray(self.wavelengths)) for n in layer], dtype=object)
 
         self.p_pol_weighting = m.p_pol_weighting
         self.s_pol_weighting = m.s_pol_weighting
