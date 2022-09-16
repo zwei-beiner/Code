@@ -165,8 +165,8 @@ class Optimiser:
         return len(indices) != 0 and (self._M - len(indices)) >= 1
 
 
-    def plot_critical_thicknesses(self, show_plot: bool, save_plot: bool) -> tuple[plt.Figure, list[plt.Axes]]:
-        df = pd.read_csv(self._root / 'optimal_parameters.csv')
+    def plot_critical_thicknesses(self, show_plot: bool, save_plot: bool, root: Path) -> None:
+        df = pd.read_csv(root / 'optimal_parameters.csv')
         n: np.ndarray = np.int_(df['n'].values)
         d_crit = self.calculate_critical_thicknesses(n)
         d: np.ndarray = df['d(nm)'].values * 1e-9
@@ -197,9 +197,10 @@ class Optimiser:
         if show_plot:
             plt.show()
         if save_plot:
-            fig.savefig(self._root / 'critical_thicknesses_plot.pdf')
+            fig.savefig(root / 'critical_thicknesses_plot.pdf')
 
-        return fig, axes
+        plt.close(fig)
+        # return fig, axes
 
 
     def _get_max_row_id(self) -> int:
@@ -309,7 +310,8 @@ class Optimiser:
         if save_plot:
             fig.savefig(self._root / 'merit_function_plot.pdf')
 
-        return fig, ax
+        plt.close(fig)
+        # return fig, ax
 
 
     def plot_reflectivity(self, show_plot: bool, save_plot: bool) -> tuple[tuple[plt.Figure, list[plt.Axes]], ...]:
@@ -406,13 +408,15 @@ class Optimiser:
         if show_plot:
             plt.show()
         if save_plot:
-            fig1.savefig(self._root / 'reflectivity_plot.pdf')
-            fig2.savefig(self._root / 'sum_difference_phase_plot.pdf')
+            fig1.savefig(root / 'reflectivity_plot.pdf')
+            fig2.savefig(root / 'sum_difference_phase_plot.pdf')
 
-        return (fig1, [ax_s, ax_p]), (fig2, [ax_sum, ax_diff, ax_angle])
+        plt.close(fig1)
+        plt.close(fig2)
+        # return (fig1, [ax_s, ax_p]), (fig2, [ax_sum, ax_diff, ax_angle])
 
 
-    def plot_marginal_distributions(self, show_plot: bool, save_plot: bool) -> tuple[plt.Figure, list[plt.Axes]]:
+    def plot_marginal_distributions(self, show_plot: bool, save_plot: bool) -> None:
         """
         Plot the distribution of samples generated during the PolyChord run for each parameter.
         The samples (dead points) are read in and plotted in a grid.
@@ -474,7 +478,8 @@ class Optimiser:
         if save_plot:
             fig.savefig(self._root / 'marginal_distributions_plot.pdf')
 
-        return fig, axes
+        plt.close(fig)
+        # return fig, axes
 
 
     def make_all_plots(self) -> None:
