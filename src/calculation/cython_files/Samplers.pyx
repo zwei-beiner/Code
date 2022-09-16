@@ -1,12 +1,11 @@
 cimport numpy as np
 import numpy as np
 
-import scipy.stats
 from pypolychord.priors import UniformPrior
 
 
 cdef class CategoricalSampler:
-    cdef object ppf
+    cdef double length
 
     def __init__(self, int length):
         """
@@ -14,18 +13,13 @@ cdef class CategoricalSampler:
         over {0, 1, ..., len(categories) - 1}.
         """
 
-        rv = scipy.stats.randint(low=0, high=length)
-        self.ppf = rv.ppf
+        self.length = np.float64(length)
 
-    cpdef int sample(self, double x):
-        # x=0 has to be handled separately.
-        # (See https://stackoverflow.com/questions/25688461/ppf0-of-scipys-randint0-2-is-1-0)
-        if x == 0.0:
-            return 0
-        # If x is not in [0, 1] (interval includes endpoints), returns np.nan.
-        # np.nan is not handled here because it is assumed that the input is in the range [0, 1].
-        index = self.ppf(x)
-        return np.int_(index)
+
+    cpdef double sample(self, double x):
+        if x == 1.:
+            return self.length - 1.
+        return np.floor(self.length * x)
 
 
 cdef class UniformSampler:
