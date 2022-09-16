@@ -506,10 +506,185 @@ class Optimiser:
         'optimal_parameters.csv' file which is created in run_local_optimisation().
         """
 
+        root = self._root
         self.plot_merit_function(False, True)
         self.plot_marginal_distributions(False, True)
-        self.plot_reflectivity(False, True)
-        self.plot_critical_thicknesses(False, True)
+        self.plot_reflectivity(False, True, root)
+        self.plot_critical_thicknesses(False, True, root)
+
+
+    def do_clustering(self) -> None:
+        print('Performing cluster analysis on PolyChord samples.')
+
+        from hdbscan import HDBSCAN
+        from sklearn.preprocessing import MinMaxScaler
+        from sklearn.metrics import pairwise_distances
+        from scipy.integrate import quad
+
+        # Create distance matrix for n's.
+        D = np.empty(self._split, dtype=np.object)
+        for k in range(len(D)):
+            values = self._n_constraints.get_unfixed_values()[k]
+            d = np.zeros((len(values), len(values)), dtype=np.float64)
+            # Fill up distance matrix.
+            for i in range(len(values)):
+                for j in range(i):
+                    n_i = values[i]
+                    n_j = values[j]
+                    def f(x: float) -> float:
+                        x = np.array([x])
+                        return (n_i(x) - n_j(x)) ** 2
+                    d[i, j] = np.sqrt(quad(f, *self._wavelengths.get_min_max())[0] /
+                                      (self._wavelengths.get_min_max()[1] - self._wavelengths.get_min_max()[0]))
+            # Use symmetry to fill up remaining values, i.e. copy values from d[i, j] into d[j, i]. Use trick of
+            # adding the transpose, noting that the unfilled values were initialised to zero.
+            d = d + d.T
+            # Shift values into the range [0, 1].
+            min = np.amin(d)
+            max = np.amax(d)
+            d = (d - min) / (max - min)
+            # Store d in D.
+            D[k] = d
+
+        # Define distance metric.
+        def dist(theta_1: np.ndarray, theta_2: np.ndarray) -> float:
+            n_1 = np.int64(np.floor(theta_1[:self._split]))
+            n_2 = np.int64(np.floor(theta_2[:self._split]))
+            d_1 = theta_1[self._split:]
+            d_2 = theta_2[self._split:]
+
+            res = 0.
+            if self._split != 0:
+                for i in range(self._split):
+                    res += D[i][n_1[i], n_2[i]]
+                res /= np.sqrt(self._split)
+
+            res += np.linalg.norm(d_1 - d_2)
+
+            return res
+
+
+        dataframe = anesthetic.NestedSamples(root=str(self._root / 'polychord_output/test'))
+        min_max_scaler = MinMaxScaler()
+        # Settings to find as many clusters as possible. Finding more is better than fewer.
+        hdbscan = HDBSCAN(min_cluster_size=5, metric='precomputed')
+        all_min_points: list[np.ndarray] = []
+        all_min_points_logL: list[np.ndarray] = []
+
+        num_iterations = self._get_max_row_id() // self.settings.nlive
+        print(num_iterations)
+        for i in range(num_iterations):
+        # for i in [0]:
+            live_points = dataframe.live_points(i * self.settings.nlive)
+            # Get live points at this iteration.
+            X = live_points.loc[:, 0:(self._nDims - 1)].values
+            logL = live_points['logL'].values
+
+            # Preprocessing d's.
+            if not self._d_constraints.all_fixed():
+                X[:, self._split:] = min_max_scaler.fit_transform(X[:, self._split:])
+
+            # Distance matrix using custom distance metric.
+            m = pairwise_distances(X, metric=dist)
+            # Run clustering.
+            hdbscan.fit(m)
+            print(hdbscan.labels_)
+
+            # from sklearn.manifold import TSNE
+            # projection = TSNE(metric='precomputed').fit_transform(m)
+            # plt.scatter(*projection.T)
+            # plt.show()
+
+            # Get cluster labels.
+            clusters = np.unique(hdbscan.labels_)
+            # Drop outliers.
+            clusters = clusters[clusters != -1]
+
+            # Undo the scaling on the thicknesses.
+            if not self._d_constraints.all_fixed():
+                X[:, self._split:] = min_max_scaler.inverse_transform(X[:, self._split:])
+
+            min_points = np.zeros((len(clusters), self._nDims), dtype=np.float64)
+            min_points_logL = np.zeros(len(clusters), dtype=np.float64)
+            # In each cluster, find the best solutions.
+            for i in clusters:
+                # Find points in cluster i.
+                in_cluster = (hdbscan.labels_ == i)
+                points_in_cluster = X[in_cluster]
+                logL_in_cluster = logL[in_cluster]
+                # Store point with the maximum logL in cluster i.
+                index = np.argmax(logL_in_cluster)
+                min_points[i] = points_in_cluster[index]
+                min_points_logL[i] = logL_in_cluster[index]
+            # min_points = np.array(min_points)
+            # min_points_logL = np.array(min_points_logL)
+
+            # Run local minimiser from all collected min_points.
+            for i, point in enumerate(min_points):
+                # Run local minimiser.
+                optimal_params, optimal_merit_function_value = self._locally_minimise(point)
+                # Store the solution.
+                min_points[i] = optimal_params
+                min_points_logL[i] = optimal_merit_function_value
+
+            # Store the points found in this iteration.
+            all_min_points.append(min_points)
+            all_min_points_logL.append(min_points_logL)
+
+        # Merge all 2D arrays into a single 2D array containing all points.
+        optimal_points = np.vstack(all_min_points)
+        # Merge all 1D arrays into a single 1D array.
+        optimal_merit_function_values = np.hstack(all_min_points_logL)
+
+        # Remove duplicates. Assuming that the clustering is good and does not produce duplicates, duplicates can
+        # arise from detecting the same cluster at different PolyChord iterations.
+        def remove_duplicates(X: np.ndarray) -> list[int]:
+            """X is a 2D float array."""
+            def are_the_same(a: np.ndarray, b: np.ndarray) -> bool:
+                return np.array_equal(np.int64(a[:self._split]), np.int64(b[:self._split])) \
+                       and np.allclose(a[self._split:], b[self._split:], rtol=1e-02, atol=1e-12)
+            indices_to_drop: list[int] = []
+            for i in range(len(X)):
+                # Skip indices which will be dropped.
+                if i not in indices_to_drop:
+                    for j in range(i + 1, len(X)):
+                        print(X[i], X[j], np.allclose(X[i], X[j], rtol=1e-02, atol=1e-12))
+                        if are_the_same(X[i], X[j]):
+                            indices_to_drop.append(j)
+            return indices_to_drop
+        indices_to_drop = remove_duplicates(optimal_points)
+        print(indices_to_drop)
+        optimal_points = np.delete(optimal_points, indices_to_drop, axis=0)
+        optimal_merit_function_values = np.delete(optimal_merit_function_values, indices_to_drop, axis=0)
+
+        # Sort according to increasing values of logL, i.e. the best solution is at index 0.
+        indices = np.argsort(optimal_merit_function_values)
+        optimal_points = optimal_points[indices]
+        optimal_merit_function_values = optimal_merit_function_values[indices]
+
+        # # Run local minimiser from all collected min_points.
+        # optimal_points = np.zeros((len(min_points), self._nDims), dtype=np.float64)
+        # optimal_merit_function_values = np.zeros(len(min_points), dtype=np.float64)
+        # for i, point in enumerate(min_points):
+        #     optimal_params, optimal_merit_function_value = self._locally_minimise(point)
+        #     optimal_points[i] = optimal_params
+        #     optimal_merit_function_values[i] = optimal_merit_function_value
+
+        # # Sort according to increasing values of logL, i.e. the best solution is at index 0.
+        # indices = np.argsort(optimal_merit_function_values)
+        # optimal_points = optimal_points[indices]
+        # optimal_merit_function_values = optimal_merit_function_values[indices]
+
+        number_of_writes = len(optimal_points) if len(optimal_points) < 20 else 20
+        print(f'Found {len(optimal_points)} local minima. Saving the {number_of_writes} best local minima.')
+
+        # Write to files and create plots.
+        for i in range(number_of_writes):
+            root = self._root / 'local_minima' / f'local_minimum_{i}'
+            root.mkdir(parents=True, exist_ok=True)
+            self._write_to_file(optimal_points[i], optimal_merit_function_values[i], root)
+            self.plot_reflectivity(False, True, root)
+            self.plot_critical_thicknesses(False, True, root)
 
 
     def get_new_optimiser(self) -> 'Optimiser':
