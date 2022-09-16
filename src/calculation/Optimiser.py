@@ -100,6 +100,9 @@ class Optimiser:
             self._split, self._nDims, self._wavelengths.get_values() if self._wavelengths.is_fixed() else None
         )
 
+        # PolyChord settings file. Initialised in self.run_global_optimisation().
+        self.settings: pypolychord.settings.PolyChordSettings = None
+
 
     @property
     def M(self):
@@ -124,17 +127,17 @@ class Optimiser:
         nDerived = 0
         niter = 5
 
-        settings = pypolychord.settings.PolyChordSettings(self._nDims, nDerived)
-        settings.nlive = 10 * settings.nlive
-        settings.read_resume = True if (self._root / 'polychord_output').is_dir() else False
+        self.settings = pypolychord.settings.PolyChordSettings(self._nDims, nDerived)
+        self.settings.nlive = self.settings.nlive
+        self.settings.read_resume = True if (self._root / 'polychord_output').is_dir() else False
         # settings.maximise = True
-        settings.max_ndead = int(niter * self._nDims * settings.nlive)  # TODO: Check if likelihood converged
-        print(f'Maximum number of dead points: {settings.max_ndead}')
-        settings.precision_criterion = -1
-        settings.feedback = 3
-        settings.base_dir = str(self._root / 'polychord_output')
+        self.settings.max_ndead = int(niter * self._nDims * self.settings.nlive)  # TODO: Check if likelihood converged
+        print(f'Maximum number of dead points: {self.settings.max_ndead}')
+        self.settings.precision_criterion = -1
+        self.settings.feedback = 3
+        self.settings.base_dir = str(self._root / 'polychord_output')
 
-        pypolychord.run_polychord(likelihood, self._nDims, nDerived, settings, prior)
+        pypolychord.run_polychord(likelihood, self._nDims, nDerived, self.settings, prior)
         print('PolyChord run completed.')
 
 
