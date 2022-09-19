@@ -6,12 +6,6 @@ from mpi4py import MPI
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 
-# Add subdirectory manually to sys.path. This is necessary because we can't place an __init__.py file into
-# the subdirectory, as this breaks Cython (this is a known Cython bug)
-# This enables us to import modules from the subdirectory directly, e.g. 'import reflectivity_c_file'
-sys.path.insert(1, str(Path(__file__).parents[1] / 'calculation'))
-sys.path.insert(1, str(Path(__file__).parents[1] / 'calculation' / 'cython_files'))
-
 from Optimiser import Optimiser
 
 
@@ -54,6 +48,8 @@ class Runner:
             if rank == 0:
                 # Print only from master to avoid too many prints to the console.
                 print(f'Running with {self._optimiser.M} layers.')
+                # Force print.
+                sys.stdout.flush()
 
             # Path to the directory into which all files will be writted for the current number of layers in the
             # multilayer coating.

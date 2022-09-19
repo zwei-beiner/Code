@@ -1,7 +1,6 @@
 from pathlib import Path
+import sys
 
-# from reflectivity_for_import import reflectivity_namespace
-# r = reflectivity_namespace()
 from BackendCalculations_for_import import BackendCalculations
 
 from typing import Union, Callable
@@ -19,8 +18,6 @@ from mpi4py import MPI
 from Utils import Utils
 from WrapperClasses import RefractiveIndex, Wavelength_constraint, n_constraints, d_constraints
 from MeritFunctionSpecification import MeritFunctionSpecification
-
-
 
 
 class Optimiser:
@@ -134,12 +131,14 @@ class Optimiser:
         # settings.maximise = True
         self.settings.max_ndead = int(niter * self._nDims * self.settings.nlive)  # TODO: Check if likelihood converged
         print(f'Maximum number of dead points: {self.settings.max_ndead}')
+        sys.stdout.flush()
         self.settings.precision_criterion = -1
         self.settings.feedback = 3
         self.settings.base_dir = str(self._root / 'polychord_output')
 
         pypolychord.run_polychord(likelihood, self._nDims, nDerived, self.settings, prior)
         print('PolyChord run completed.')
+        sys.stdout.flush()
 
 
     def calculate_critical_thicknesses(self, optimal_n: np.ndarray):
@@ -516,6 +515,7 @@ class Optimiser:
 
     def do_clustering(self) -> None:
         print('Performing cluster analysis on PolyChord samples.')
+        sys.stdout.flush()
 
         from hdbscan import HDBSCAN
         from sklearn.preprocessing import MinMaxScaler
