@@ -20,13 +20,13 @@ Longer computing jobs are not supposed to be run on a login node. Login nodes ar
 
 ### File system
 
-There are two available directories can be run.
+There are two available directories.
 
 For non-computing work
 ```shell
 /home/<username>/
 ```
-is available. This provides a 50GB maximum disk quota, hourly backups but is slower for reading and writing compared to the HPC work directory (see below).
+is available. This provides a 50GB maximum disk quota and hourly backups but is slower for reading and writing compared to the HPC work directory (see below).
 
 For any HPC I/O, it is recommended to use
 ```shell
@@ -74,6 +74,15 @@ Suppose that
 - a `venv` is installed as `/rds/user/<username>/hpc-work/venv/`
 - the code we would like to run on the supercomputer is `/rds/user/<username>/hpc-work/project/main.py`
 - `main.py` can be run with MPI, i.e. as `mpirun -n <ncores> python main.py`
+
+which corresponds to the following directory structure:
+```
+hpc-work
+|- venv
+|- project
+   |- main.py
+   |- (other files which main.py can use)
+```
 
 The first thing to do is to create a bash script, say `run.sh`, which activates the virtual environment and runs `main.py`:
 #### run.sh
@@ -262,7 +271,7 @@ Most importantly, the file `slurm-3368222.out` contains everything that was prin
 
 ### Monitoring jobs
 
-From the time of submission of the submission script, it usually takes a while for the job to start running on the supercomputer (experience says anything from ~2 min to ~2 days). 
+From the time of submission of the submission script, it usually takes a while for the job to start running on the supercomputer (experience says anything from ~2 min to ~2 days). When the job starts running, an email is sent to the user. If the job crashes or terminates successfully, emails are also sent.
 
 To get the scheduled start time of the job, run
 ```shell
@@ -276,7 +285,7 @@ A job can be cancelled while it is running by using the command
 scancel 3368222
 ```
 
-A list of all jobs for the project name `BUSCHER-SL3-CPU` for the user `<username>` and in a specified time interval is printed with
+A list of all submitted jobs for the project name `BUSCHER-SL3-CPU` for the user `<username>` and in a specified time interval is printed with
 ```shell
 gstatement -p BUSCHER-SL3-CPU -u <username> -s "2022-09-01-00:00:00" -e "2022-09-19-23:59:59"
 ```
