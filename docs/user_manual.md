@@ -189,7 +189,8 @@ M = 5
 n_specification = (
     ('fixed', Utils.constant(1.7)), 
     ('categorical', [Utils.constant(0.3), Utils.constant(2.4)]),
-    ('fixed', Utils.constant(0.9)), ('fixed', Utils.constant(0.6)),
+    ('fixed', Utils.constant(0.9)), 
+    ('fixed', Utils.constant(0.6)),
     ('categorical', [Utils.constant(1.3), Utils.constant(5.6), Utils.constant(3.8)])
 )
 d_specification = (
