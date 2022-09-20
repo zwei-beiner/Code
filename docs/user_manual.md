@@ -118,7 +118,7 @@ The type of the thickness specification is thus, in Python,
 tuple[tuple[str, Union[float, tuple[float, float]]], ...].
 ```
 
-For the example of the 5-layer coating,
+For example for a 5-layer coating,
 |Layer| Constraint type| Value(s)
 |--|--|--
 |1|fixed|$d_1=100\mathrm{nm}$
