@@ -168,12 +168,16 @@ Note that some variables are functions of wavelength.
 
 For example, to specify that the 5-layer coating should be an antireflection coating for p-polarised light, that the corresponding term in the merit function should have a weighting of 10,000 and that all other terms should be switched off,
 ```python
-p_pol_weighting      = 10000
-s_pol_weighting      = 0
-sum_weighting        = 0
-difference_weighting = 0
-phase_weighting      = 0
+p_pol_weighting       = 10000
+s_pol_weighting       = 0
+sum_weighting         = 0
+difference_weighting  = 0
+phase_weighting       = 0
+target_reflectivity_p = lambda wavelengths: np.zeros(len(wavelengths))
+# Leave all other variables to their default values.
 ```
+
+Since the weighting term is non-zero only for `p_pol_weighting`, the merit function contains only this term, while the other terms are switched off.
 
 ### Summary
 
