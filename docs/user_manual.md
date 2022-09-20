@@ -14,7 +14,7 @@ The following parameters must be specified to run a calculation:
 |Refractive index of the outer medium|$n_\text{outer}$| `RefractiveIndex` | -
 |Refractive index of the substrate|$n_\text{substrate}$| `RefractiveIndex` | -
 |Incident angle in the outer medium|$\theta_\text{outer}$| Python `float` | <ul><li>Unit: $\mathrm{radian}$</li><li>Valid input range is $(-\frac{\pi}{2}, \frac{\pi}{2})$. The angles $-\frac{\pi}{2}$ and $\frac{\pi}{2}$ (or angles very close to these, within floating point precision) are not valid input as they cause the calculation of the reflected amplitude to fail (specifically, the matrix inversion)</li></ul>
-|Wavelengths | $\lbrace \lambda_1, \lambda_2,\dots, \lambda_K\rbrace$  | One of <ul><li>`tuple[float, float]`</li><li>`numpy` array</li></ul> | <ul><li>Unit: $\mathrm{meter}$.</li><li>These are the wavelengths in the outer medium. They are related to the wavelength in vacuum by $\lambda_\text{vac}=n_\text{outer}(\lambda)\lambda$.</li><li>If specified as a `tuple`, the input is parsed as the lower and upper limits of an interval, $(\lambda_\text{min}, \lambda_\text{max})$, and the wavelengths $\rbrace\lambda_1, \lambda_2,\dots, \lambda_K\lbrace$ are automatically chosen.</li><li>If specified as a `numpy` array, these are understood to be the wavelengths $\rbrace\lambda_1, \lambda_2,\dots, \lambda_K\lbrace$ themselves.</li></ul>
+|Wavelengths | $\lbrace \lambda_1, \lambda_2,\dots, \lambda_K\rbrace$  | One of <ul><li>`tuple[float, float]`</li><li>`numpy` array</li></ul> | <ul><li>Unit: $\mathrm{meter}$.</li><li>These are the wavelengths in the outer medium. They are related to the wavelength in vacuum by $\lambda_\text{vac}=n_\text{outer}(\lambda)\lambda$.</li><li>If specified as a `tuple`, the input is parsed as the lower and upper limits of an interval, $(\lambda_\text{min}, \lambda_\text{max})$, and the wavelengths $\lbrace\lambda_1, \lambda_2,\dots, \lambda_K\lrbrace$ are automatically chosen.</li><li>If specified as a `numpy` array, these are understood to be the wavelengths $\lbrace\lambda_1, \lambda_2,\dots, \lambda_K\rbrace$ themselves.</li></ul>
 | Specification for the constraints on the refractive indices of each layer | - | (see below) | (see below)
 | Specification for the constraints on the thicknesses of each layer | - | (see below) | Unit: $\mathrm{meter}$
 | Specification for the merit function | - | (see below) | (see below)
@@ -54,10 +54,10 @@ For example, consider the following coating with 5 layers:
 |Layer| Constraint type| Value(s)
 |--|--|--
 |1|fixed|$n_1=1.7$
-|2|categorical| $n_2\in \rbrace0.3, 2.4\lbrace$
+|2|categorical| $n_2\in \lbrace0.3, 2.4\rbrace$
 |3|fixed|$n_3=0.9$
 |4|fixed |$n_4=0.6$
-|5|categorical |$n_5\in\rbrace1.3, 5.6, 3.8\lbrace$
+|5|categorical |$n_5\in\lbrace1.3, 5.6, 3.8\rbrace$
 
 For simplicity, the refractive indices here are chosen to be constant over all wavelengths, i.e. the actual value which must be provided for layer 1 is
 ```python
