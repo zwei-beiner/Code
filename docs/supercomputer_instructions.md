@@ -1,11 +1,21 @@
 ## Instructions for the CSD3 cluster
 
-These instructions are applicable for users with Service Level 3 (free usage) which provides
+These instructions are applicable for users with [Service Level 3](https://docs.hpc.cam.ac.uk/hpc/user-guide/policies.html#service-levels) (free usage) which provides
 - Skylake CPUs (Intel Xeon Skylake 6142 processors, 2.6GHz)
 - 200,000 CPU core hours per quarter of the year
 - Maximum of 448 cores per job
 - Maximum of 12h walltime per job
 - 6GB of RAM per core (12GB is also possible but might cost more)
+
+In the following, the main steps to run a job on the supercomputer are explained:
+1. Logging into the supercomputer
+2. The file system available to the user
+3. How to install Python
+4. Preparation of code for submission as a job
+5. Submission of the job
+6. Monitoring of a running job
+7. Transferring files between the supercomputer and the user's machine
+8. Known issues with the CSD3 cluster.
 
 ### Logging in 
 
@@ -35,6 +45,8 @@ For any HPC input/output, it is recommended to use
 as this has much faster read/write speeds and a 1TB maximum disk quota (but no backups are made).
 
 In the following, we will assume that the user is in the directory `/rds/user/<username>/hpc-work/`.
+
+For more information on the file system, [see here](https://docs.hpc.cam.ac.uk/hpc/user-guide/io_management.html).
 
 ### Installing Python
 
@@ -67,9 +79,9 @@ All available versions of Python can be shown with the command
 module avail 2>&1 | grep -i python
 ```
 
-### Preparing the code
+### Preparing to run code on the supercomputer
 
-Suppose that 
+Suppose that a directory `project` has been created and that it contains the file `main.py` which is code that should run on the supercomputer. Assume that
 - the current working directory is `/rds/user/<username>/hpc-work/project/`
 - a `venv` is installed as `/rds/user/<username>/hpc-work/venv/`
 - the code we would like to run on the supercomputer is `/rds/user/<username>/hpc-work/project/main.py`
@@ -91,7 +103,7 @@ source /rds/user/<username>/hpc-work/venv/bin/activate
 python ./main.py
 ```
 
-The second thing to do is to create a slurm submission script (SLURM is the workload manager of the cluster). This is a bash script which is submitted to the supercomputer and specifies how the job should be run. Let's call it `hpc_job`. Examples of slurm submission scripts can be found in the directory `/usr/local/Cluster-Docs/SLURM`.
+The second thing to do is to create a [slurm submission script](https://docs.hpc.cam.ac.uk/hpc/user-guide/batch.html#submitting-jobs) ([SLURM](https://slurm.schedmd.com/documentation.html) is the workload manager of the cluster). This is a bash script which is submitted to the supercomputer and specifies how the job should be run. Let's call it `hpc_job`. Examples of slurm submission scripts can be found in the directory `/usr/local/Cluster-Docs/SLURM`.
 
 #### hpc_job
 
@@ -295,9 +307,9 @@ The current account balance can be viewed with
 mybalance
 ```
 
-### Transferring files
+### Transferring files between the supercomputer and the user's machine
 
-Files can be transferred with `rsync`. For example, to copy the directory `project` to the user's machine:
+Files can be transferred with `rsync`. The command has to be run in the user's terminal (while not logged in to the supercomputer). For example, to copy the directory `project` to the user's machine:
 ```shell
 rsync -av <username>@login-cpu.hpc.cam.ac.uk:/rds/user/<username>/hpc-work/project /Users/<user>
 ```
@@ -307,9 +319,11 @@ To update the contents of a directory which already exists on the user's machine
 rsync -av <username>@login-cpu.hpc.cam.ac.uk:/rds/user/<username>/hpc-work/project/ /Users/<user>/project/
 ```
 
+For more information on file transfer, [see here](https://docs.hpc.cam.ac.uk/hpc/user-guide/transfer.html).
+
 ### Known supercomputer issues
 
-If a job crashes, the usual practice of looking at the output in the `slurm-*.out` file and googling the issue applies. 
+If a job crashes, the usual practice of looking at the output in the `slurm-*.out` file and googling the issue applies. When in doubt, the CSD3 support can be contacted via <support@hpc.cam.ac.uk> ([see here](https://docs.hpc.cam.ac.uk/hpc/user-guide/getting_support.html)).
 
 Known issues when running the code on the supercomputer are:
 - Job appears to be running, but the last line in the `slurm-*.out` file is `Socket timed out on send/recv operation`. 
@@ -326,4 +340,4 @@ Known issues when running the code on the supercomputer are:
   - This error has not been reproducible consistently and occurred extremely rarely and at random in early versions of the code. It has not been found to occur in the newest version of the code. Re-running has fixed the problem every time it occurred.
 
 ## More information 
-For the full documentation of the CSD3 cluster, see https://docs.hpc.cam.ac.uk/hpc/index.html
+For the full documentation of the CSD3 cluster, see <https://docs.hpc.cam.ac.uk/hpc/index.html>.
