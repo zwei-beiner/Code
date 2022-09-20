@@ -264,7 +264,7 @@ Consider the following design problem:
 | Refractive index specification | Any material in the `Materials` data base which does not have an absorption peak in the wavelength range
 | Thickness specification | The thickness of each layer is bounded between $0\mathrm{nm}$ and $350\mathrm{nm}$ 
 | $\theta_\text{outer}$ | $15^\circ$
-|Target reflectivity | Dichroic with <ul><li>Reflection band ($\tilde{R} = 1$): <ul><li>$500\mathrm{nm}$ - $900\mathrm{nm}$</li></ul></li><li>Transmission bands ($\tilde{R} = 0$): <ul><li>$1050\mathrm{nm}$ - $1300\mathrm{nm}$</li><li>$1450\mathrm{nm}$ - $1800\mathrm{nm}$</li><li>$1950\mathrm{nm}$ - $2350\mathrm{nm}$</li></ul></li><li>Reflection between bands is unconstrained</li></ul> 
+|Target reflectivity | Dichroic with <ul><li>Reflection band ($\tilde{R}$): <ul><li>$500\mathrm{nm}$ - $900\mathrm{nm}$</li></ul></li><li>Transmission bands ($\tilde{R}$): <ul><li>$1050\mathrm{nm}$ - $1300\mathrm{nm}$</li><li>$1450\mathrm{nm}$ - $1800\mathrm{nm}$</li><li>$1950\mathrm{nm}$ - $2350\mathrm{nm}$</li></ul></li><li>Reflection between bands is unconstrained</li></ul> 
 
 The `main.py` file is:
 
