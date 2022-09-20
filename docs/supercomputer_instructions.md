@@ -295,5 +295,23 @@ The current account balance can be viewed with
 mybalance
 ```
 
+### Known supercomputer issues
+
+If a job crashes, the usual practice of looking at the output in the `slurm-*.out` file and googling the issue applies. 
+
+Known issues when running the code on the supercomputer are:
+- Job appears to be running, but the last line in the `slurm-*.out` file is `Socket timed out on send/recv operation`. 
+  - This has been confirmed by the CSD3 administrators to be a random hiccup in the supercomputer or network connection.
+- Crash with the error message `insufficient virtual memory`. This means that the RAM was exhausted, most likely due to PolyChord allocating too much memory for the live points. Fixes are:
+  - Easiest fix: Re-run again without any changes. 
+  - Allocate 12GB of RAM to each core by changing the line `#SBATCH -p skylake` to `#SBATCH -p skylake-himem` in the slurm submission script. 
+  - Instead of installing the `master` branch of PolyChord, install the `dense_clustering` branch, which uses less memory: `pip install git+https://github.com/PolyChord/PolyChordLite@dense_clustering`. However, at the time of writing, the `dense_clustering` branch is 2 commits behind the `master` branch.
+- Python package issues: A Python package which works on the user's local machine throws an error on the supercomputer. (At the time of writing, this has happened with the `anesthetic` and the `joblib` libraries.)
+  - Check whether the version on the local machine is the same as the one on the supercomputer. If the versions are the same, check whether the same `git commit` was installed. If the same `commit` is installed, try to replicate the code in the package line by line in the Python interpreter to see where the error occurs.
+- The `slurm-*.out` file grows in size until there is no free disk space.
+  - Try removing or commenting out any print statements in the code which caused this issue. Note that the output of PolyChord cannot be removed, in which case a different solution must be sought.
+- Crash with the error message `double free or corruption`, meaning that some code tried to free some memory twice, causing a segfault. 
+  - This error has not been reproducible consistently and occurred extremely rarely and at random in early versions of the code. It has not been found to occur in the newest version of the code. Re-running has fixed the problem every time it occurred.
+
 ## More information 
 For the full documentation of the CSD3 cluster, see https://docs.hpc.cam.ac.uk/hpc/index.html
