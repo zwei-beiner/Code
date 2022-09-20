@@ -123,4 +123,4 @@ d_specification = (
 
 The merit function $f$ is the function to be minimised. The parameter values which minimise the merit function determine the coating which fulfills the design specifications as closely as possible.
 
-The merit function depends on the unfixed parameters $\bm{p}$, which consist of $p$ unfixed refractive indices and $q$ unfixed thicknesses.
+The merit function depends on the unfixed parameters $\mathbf{p}$, which consist of $p$ unfixed refractive indices and $q$ unfixed thicknesses.
