@@ -215,7 +215,8 @@ kwargs = dict(
     s_pol_weighting=0,
     sum_weighting=0,
     difference_weighting=0,
-    phase_weighting=0
+    phase_weighting=0,
+    target_reflectivity_p = lambda wavelengths: np.zeros(len(wavelengths))
 )
 ```
 
