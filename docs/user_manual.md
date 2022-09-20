@@ -61,11 +61,11 @@ The following parameters must be specified to run a calculation:
 
 A multilayer coating consists of $M$ layers. The refractive index function, $n_i$, of layer $i$ can either be
 1. fixed, i.e. the optimiser does not have to choose the refractive index function for the layer, or
-1. unfixed, in which case one must specify a list of refractive index functions from which the optimiser must choose the best, i.e. it is a categorical variable.
+2. unfixed, in which case one must specify a list of refractive index functions from which the optimiser must choose the best, i.e. it is a categorical variable.
 
 Therefore, each layer is specified by a tuple `(string, value)`, in which `string` can take be either 
 1. `'fixed'` or
-1. `'categorical'`
+2. `'categorical'`
 
 and `value` can be either
 1. a value of type `RefractiveIndex` or
