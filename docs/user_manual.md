@@ -14,7 +14,7 @@ from calculation.Compiler import compile_cython_files
 compile_cython_files()
 ```
 
-The function the following command:
+The function calls the following command:
 ```shell
 python setup.py build_ext --inplace
 ```
