@@ -183,7 +183,7 @@ Since the weighting term is non-zero only for `p_pol_weighting`, the merit funct
 
 Finally, a name for the project must be chosen (`project_name`), which determines the name of the directory under which all output files will be stored.
 
-The following `dict` is a full minimal example specification:
+The following is a full minimal example specification:
 ```python
 M = 5
 n_specification = (
