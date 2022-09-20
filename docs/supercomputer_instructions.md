@@ -28,7 +28,7 @@ For non-computing work (e.g. editing reports,...)
 ```
 is available. This provides a 50GB maximum disk quota and hourly backups but is slower for reading and writing compared to the HPC work directory (see below).
 
-For any HPC I/O, it is recommended to use
+For any HPC input/output, it is recommended to use
 ```shell
 /rds/user/<username>/hpc-work/
 ```
