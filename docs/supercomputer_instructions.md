@@ -3,8 +3,8 @@
 These instructions are applicable for users with Service Level 3 (free usage) which provides
 - Skylake CPUs (Intel Xeon Skylake 6142 processors, 2.6GHz)
 - 200,000 CPU core hours per quarter of the year
-- maximum of 448 cores per job
-- maximum of 12h walltime per job
+- Maximum of 448 cores per job
+- Maximum of 12h walltime per job
 - 6GB of RAM per core (12GB is also possible but might cost more)
 
 ### Logging in 
@@ -293,6 +293,18 @@ gstatement -p BUSCHER-SL3-CPU -u <username> -s "2022-09-01-00:00:00" -e "2022-09
 The current account balance can be viewed with 
 ```shell
 mybalance
+```
+
+### Transferring files
+
+Files can be transferred with `rsync`. For example, to copy the directory `project` to the user's machine:
+```shell
+rsync -av <username>@login-cpu.hpc.cam.ac.uk:/rds/user/<username>/hpc-work/project /Users/<user>
+```
+
+To update the contents of a directory which already exists on the user's machine:
+```shell
+rsync -av <username>@login-cpu.hpc.cam.ac.uk:/rds/user/<username>/hpc-work/project/ /Users/<user>/project/
 ```
 
 ### Known supercomputer issues
