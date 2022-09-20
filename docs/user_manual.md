@@ -338,3 +338,19 @@ kwargs = dict(project_name='MROI_dichroic',
 runner = Runner(**kwargs)
 runner.run()
 ```
+
+### Output files
+
+The code generates the following output:
+
+| Output file/directory | Type | Description |
+|--|--|--
+| `critical_thicknesses_plot.pdf` | File | For each layer, a plot of <ul><li>the thickness $d_\mathrm{optimal}$ found in the global optimisation (orange line)</li><li>the critical thickness $d_\text{critical}$ (blue line)</li></ul> as functions of wavelength are shown. If the orange line lies below the blue line for all wavelengths, then the layer can be regarded as negligibly thin and taken out of the multilayer stack. This is done automatically by the code.
+| `marginal_distributions_plot.pdf` | File |The distribution of the parameter values of the dead points are shown.</br> Ideally, as PolyChord converges to the global minimum of the merit function, the distributions should be unimodal and sharply peaked.
+| `merit_function_plot.pdf` | File |For each iteration of PolyChord, the largest merit function value of the current set of live points is plotted. </br>Ideally, the merit function should initially decrease rapidly, followed by gradual convergence as the parameter space is compressed to the neighbourhood of the global minimum of the merit function.
+|`optimal_merit_function_value.txt`| File| The merit function value after the local optimisation has completed.
+| `optimal_parameters.csv` | File| The optimal solution to the design problem. <ul><li>Each entry in the column `n` is an integer which corresponds to the position of the refractive index function in the list of refractive indices provided in the refractive index specification.</li><li>The column `d(nm)` contains the thicknesses of each layer in nanometers.</li><li>The column `Remove` is a boolean which, if `True`, indicates that the layer can be removed. If any of the entries are `True`, the code automatically removes the layer(s) and reruns the calculation with the reduced stack.</li></ul>
+| `reflectivity_plot.pdf` | File | <ul><li>Shows plots of $R_s$ and $R_p$ against wavelength as red lines. The shaded red regions indicate the error bands (68% central credibility intervals, calculated by sampling from a Gaussian centred at the optimal thicknesses with a standard deviation of $1\mathrm{nm}$ in all directions).</li><li>The provided target reflectivities ($\tilde R_s$ or $\tilde R_p$) are shown as blue lines.</li></ul>
+| `sum_difference_phase_plot.pdf` | File | <ul><li>Similarly to `reflectivity_plot.pdf`, plots of $S$, $D$ and $\phi_{sp}$ are shown.</li><li>The phase difference is unwrapped using `numpy.unwrap()` so that it is a continuous function.</li></ul>
+| `local_minima` | Directory | Contains all local minima found by the clustering algorithm in post-processing of PolyChord samples. </br>Each local minimum has its own subdirectory, e.g. `local_minimum_0`, and they are sorted from best to worst, i.e. `local_minimum_0` is the global optimum and `local_minimum_1` is the next best optimum, etc. </br>Each subdirectory contains its own <ul><li>`critical_thicknesses_plot.pdf`</li><li>`optimal_merit_function_value.txt`</li><li>`optimal_merit_function_value.txt`</li><li>`reflectivity_plot.pdf`</li> <li>`sum_difference_phase_plot.pdf`</li></ul>
+| `polychord_output` | Directory | Raw output of PolyChord. To read from this directory, it is advised to use the `anesthetic` Python package.
