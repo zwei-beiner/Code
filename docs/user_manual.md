@@ -2,9 +2,27 @@
 
 This manual provides instructions on how to set up a multilayer coating calculation using the `coating` code. This concerns the creation of the `main.py` file in the [Instructions for the CSD3 cluster](https://github.com/zwei-beiner/Code/blob/master/docs/supercomputer_instructions.md).
 
+In the following, the types `Callable` and `Union` from the Python `typing` library will be used.
+
+## Compiling the Cython files
+
+First, it should be ensured that the Cython files are compiled to `.so` files.
+
+This is done by calling the function `compile_cython_files()`:
+```python
+from calculation.Compiler import compile_cython_files
+compile_cython_files()
+```
+
+The function the following command:
+```shell
+python setup.py build_ext --inplace
+```
+which calls the `setup.py` script to compile the Cython files.
+
 ## Parameters for the calculation
 
-All refractive indices are functions of wavelength and must be evaluatable at any wavelength specified by the input wavelengths. This means that they must take a `numpy` array as an input and return a `numpy` array, i.e. of type `Callable[[numpy.ndarray], np.ndarray]`, which defined to be the type `RefractiveIndex`.
+All refractive indices are functions of wavelength and it must be possible to evaluate them at any wavelength specified by the input wavelengths. This means that they must take a `numpy` array as an input and return a `numpy` array, i.e. they must be of type `Callable[[numpy.ndarray], np.ndarray]`, which is defined to be the type `RefractiveIndex`.
 
 The following parameters must be specified to run a calculation:
 
@@ -14,7 +32,7 @@ The following parameters must be specified to run a calculation:
 |Refractive index of the outer medium|$n_\text{outer}$| `RefractiveIndex` | -
 |Refractive index of the substrate|$n_\text{substrate}$| `RefractiveIndex` | -
 |Incident angle in the outer medium|$\theta_\text{outer}$| Python `float` | <ul><li>Unit: $\mathrm{radian}$</li><li>Valid input range is $(-\frac{\pi}{2}, \frac{\pi}{2})$. The angles $-\frac{\pi}{2}$ and $\frac{\pi}{2}$ (or angles very close to these, within floating point precision) are not valid input as they cause the calculation of the reflected amplitude to fail (specifically, the matrix inversion)</li></ul>
-|Wavelengths | $\lbrace \lambda_1, \lambda_2,\dots, \lambda_K\rbrace$  | One of <ul><li>`tuple[float, float]`</li><li>`numpy` array</li></ul> | <ul><li>Unit: $\mathrm{meter}$.</li><li>These are the wavelengths in the outer medium. They are related to the wavelength in vacuum by $\lambda_\text{vac}=n_\text{outer}(\lambda)\lambda$.</li><li>If specified as a `tuple`, the input is parsed as the lower and upper limits of an interval, $(\lambda_\text{min}, \lambda_\text{max})$, and the wavelengths $\lbrace\lambda_1, \lambda_2,\dots, \lambda_K\rbrace$ are automatically chosen.</li><li>If specified as a `numpy` array, these are understood to be the wavelengths $\lbrace\lambda_1, \lambda_2,\dots, \lambda_K\rbrace$ themselves.</li></ul>
+|Wavelengths | $\lbrace \lambda_1, \lambda_2,\dots, \lambda_K\rbrace$  | One of <ul><li>`tuple[float, float]`</li><li>`numpy` array</li></ul> | <ul><li>Unit: $\mathrm{meter}$</li><li>These are the wavelengths in the outer medium. They are related to the wavelength in vacuum by $\lambda_\text{vac}=n_\text{outer}(\lambda)\lambda$.</li><li>If specified as a `tuple`, the input is parsed as the lower and upper limits of an interval, $(\lambda_\text{min}, \lambda_\text{max})$, and the wavelengths $\lbrace\lambda_1, \lambda_2,\dots, \lambda_K\rbrace$ are automatically chosen.</li><li>If specified as a `numpy` array, these are understood to be the wavelengths $\lbrace\lambda_1, \lambda_2,\dots, \lambda_K\rbrace$ themselves.</li></ul>
 | Specification for the constraints on the refractive indices of each layer | - | (see below) | (see below)
 | Specification for the constraints on the thicknesses of each layer | - | (see below) | Unit: $\mathrm{meter}$
 | Specification for the merit function | - | (see below) | (see below)
@@ -31,7 +49,7 @@ The following parameters must be specified to run a calculation:
 - a specification for the merit function (see below) -->
 
 
-## Specification for the layer refractive indices
+### Specification for the layer refractive indices
 
 A multilayer coating consists of $M$ layers. The refractive index function, $n_i$, of layer $i$ can either be
 1. fixed, i.e. the optimiser does not have to choose the refractive index function for the layer, or
@@ -82,7 +100,7 @@ n_specification = (
 )
 ```
 
-## Specification for the layer thicknesses
+### Specification for the layer thicknesses
 
 The constraints for the layer thicknesses are specified similarly to the constraints for the refractive indices.
 
@@ -119,8 +137,197 @@ d_specification = (
 )
 ```
 
-## Specification for the merit function
+### Specification for the merit function
 
-The merit function $f$ is the function to be minimised. The parameter values which minimise the merit function determine the coating which fulfills the design specifications as closely as possible.
+The merit function $f$ is the function to be minimised. It is fully specified by the following parameters:
 
-The merit function depends on the unfixed parameters $\mathbf{p}$, which consist of $p$ unfixed refractive indices and $q$ unfixed thicknesses.
+<!-- The parameter values which minimise the merit function determine the coating which fulfills the design specifications as closely as possible. The merit function depends on the unfixed parameters $\mathbf{p}$, which consist of $0\le p \le M$ unfixed refractive indices and $0\le q\le M$ unfixed thicknesses and has terms listed in the following table: -->
+
+| Name | Symbol | Type | Default value (for all wavelengths)
+|-|-|-|-|
+|`s_pol_weighting`| $w_{R_s}$ | `float` | - 
+|`p_pol_weighting`| $w_{R_p}$ | `float` | - 
+|`sum_weighting`| $w_{S}$ | `float` | - 
+|`difference_weighting`| $w_{D}$ | `float` | - 
+|`phase_weighting`| $w_{\phi_{sp}}$ | `float` | - 
+|`target_reflectivity_s`| $\tilde{R}_s$ | `Callable[[np.ndarray], np.ndarray]` | 0
+|`target_reflectivity_p`| $\tilde{R}_p$ | `Callable[[np.ndarray], np.ndarray]` | 0
+|`target_sum`| $\tilde{S}$ | `Callable[[np.ndarray], np.ndarray]` | 0
+|`target_difference`| $\tilde{D}$ | `Callable[[np.ndarray], np.ndarray]` | 0
+|`target_relative_phase`| $\tilde{\phi}_{sp}$ | `Callable[[np.ndarray], np.ndarray]` | 0
+|`weight_function_s`| $\delta R_s$ | `Callable[[np.ndarray], np.ndarray]` | 1
+|`weight_function_p`|$\delta R_p$  | `Callable[[np.ndarray], np.ndarray]` | 1
+|`weight_function_sum`| $\delta S$ | `Callable[[np.ndarray], np.ndarray]` | 1
+|`weight_function_difference`| $\delta D$ | `Callable[[np.ndarray], np.ndarray]` | 1
+|`weight_function_phase`| $\delta \phi_{sp}$ | `Callable[[np.ndarray], np.ndarray]` | 1
+
+The default value is chosen such that, if the parameter is not specified, the corresponding term in the merit function will be zero, i.e. the term has no effect on the calculations.
+
+Note that some variables are functions of wavelength.
+
+For example, to specify that the 5-layer coating should be an antireflection coating for p-polarised light, that the corresponding term in the merit function should have a weighting of 10,000 and that all other terms should be switched off,
+```python
+p_pol_weighting      = 10000
+s_pol_weighting      = 0
+sum_weighting        = 0
+difference_weighting = 0
+phase_weighting      = 0
+```
+
+### Summary
+
+Finally, a name for the project must be chosen (`project_name`), which determines the name of the directory under which all output files will be stored.
+
+The following `dict` is a full minimal example specification:
+```python
+M = 5
+n_specification = (
+    ('fixed', Utils.constant(1.7)), 
+    ('categorical', [Utils.constant(0.3), Utils.constant(2.4)]),
+    ('fixed', Utils.constant(0.9)), ('fixed', Utils.constant(0.6)),
+    ('categorical', [Utils.constant(1.3), Utils.constant(5.6), Utils.constant(3.8)])
+)
+d_specification = (
+    ('fixed', 100e-9), 
+    ('fixed', 200e-9), 
+    ('fixed', 70e-9), 
+    ('bounded', (0., 400e-9)), 
+    ('bounded', (0., 100e-9))
+)
+wavelength_specification = (600e-9, 2300e-9)
+
+kwargs = dict(
+    project_name='test_project',
+    M=M,
+    n_outer=Utils.constant(1.00),
+    n_substrate=Utils.constant(1.50),
+    theta_outer=np.pi / 3,
+    wavelengths=wavelength_specification,
+    n_specification=n_specification,
+    d_specification=d_specification,
+    p_pol_weighting=10000,
+    s_pol_weighting=0,
+    sum_weighting=0,
+    difference_weighting=0,
+    phase_weighting=0
+)
+```
+
+## Running the calculation
+
+The `dict` is passed to the `Runner` class and the calculation is started like this:
+```python
+from calculation.Runner import Runner
+runner = Runner(**kwargs)
+runner.run()
+```
+
+The above example can be found in the file [`main.py`](https://github.com/zwei-beiner/Code/blob/master/src/main.py) which can be run with MPI on 4 cores like this:
+```shell
+mpirun -n 4 python main.py
+```
+
+## `Utils.multilayer_specification`
+
+For larger multilayer stacks, the function `Utils.multilayer_specification(M, string, [pattern])` repeats a pattern `M` times. For example, to create a multilayer stack with 5 layers with alternating fixed refractive indices, one can write
+```python
+Utils.multilayer_specification(5, 'fixed', [Utils.constant(2.), Utils.constant(3.)])
+```
+giving 
+```python
+(('fixed', Utils.constant(2.)), ('fixed', Utils.constant(3.)), ('fixed', Utils.constant(2.)), ('fixed', Utils.constant(3.)), ('fixed', Utils.constant(2.)))
+```
+
+## Example 2: Optimising a coating on separated wavelength ranges
+
+Consider the following design problem:
+|Parameter| Value |
+|--|--|
+| $M$ | $20$ 
+| $n_\text{outer}$| Air, $n_\text{outer}=1$ 
+|$n_\text{substrate}$| Fused silica 
+| Refractive index specification | Any material in the `Materials` data base which does not have an absorption peak in the wavelength range
+| Thickness specification | The thickness of each layer is bounded between $0\mathrm{nm}$ and $350\mathrm{nm}$ 
+| $\theta_\text{outer}$ | $15^\circ$
+|Target reflectivity | Dichroic with <ul><li>Reflection band ($\tilde R=1$): <ul><li>$500\mathrm{nm}$ - $900\mathrm{nm}$</li></ul></li><li>Transmission bands ($\tilde R=0$): <ul><li>$1050\mathrm{nm}$ - $1300\mathrm{nm}$</li><li>$1450\mathrm{nm}$ - $1800\mathrm{nm}$</li><li>$1950\mathrm{nm}$ - $2350\mathrm{nm}$</li></ul></li><li>Reflection between bands is unconstrained</li></ul> 
+
+The `main.py` file is:
+
+```python 
+import numpy as np
+from calculation.Compiler import compile_cython_files
+from calculation.Utils import Utils
+from calculation.RefractiveIndices import Materials
+from calculation.Runner import Runner
+from calculation.Optimiser import Optimiser
+
+
+compile_cython_files()
+
+M = 20
+# Don't include materials which have absorption peak in the wavelength range.
+# Repeat the selection of materials M times.
+n_specification = Utils.multilayer_specification(
+    M, 'categorical', [[
+        Materials.Nb2O5,
+        Materials.SiO2,
+        Materials.MgF2,
+        Materials.Ta2O5,
+        Materials.Ag,
+        Materials.Au,
+        Materials.BK7,
+        Materials.Sapphire_ordinary_wave,
+        Materials.Cr,
+        Materials.GaAs,
+        Materials.Si,
+        Materials.Si3N4,
+        Materials.TiO2
+]])
+
+# Repeat ('bounded', (0., 350e-9)) M times.
+d_specification = Utils.multilayer_specification(M, 'bounded', [(0., 350e-9)])
+
+# Specify the wavelengths at which the merit function is evaluated manually.
+wavelength_specification = np.concatenate([
+    np.linspace(500e-9, 900e-9, num=25),
+    np.linspace(1050e-9, 1300e-9, num=25),
+    np.linspace(1450e-9, 1800e-9, num=25),
+    np.linspace(1950e-9, 2350e-9, num=25)
+])
+
+# Function which is 1. below 900nm and 0 above.
+target_reflectivity = lambda wl: np.where(np.asarray(wl) < 900e-9, 1., 0.)
+
+# Incident angle in radians.
+theta_outer = 15. * np.pi / 180.
+
+# Substrate is SiO2 (Fused Silica).
+n_substrate = Materials.SiO2
+# Outer medium is air (n = 1.00).
+n_outer = Utils.constant(1.00)
+
+# Collect all parameters.
+kwargs = dict(project_name='MROI_dichroic',
+    M=M,
+    n_outer=n_outer,
+    n_substrate=n_substrate,
+    theta_outer=theta_outer,
+    wavelengths=wavelength_specification,
+    n_specification=n_specification,
+    d_specification=d_specification,
+    # Separately optimise p- and s-polarised reflectivities.
+    p_pol_weighting=1000,
+    s_pol_weighting=1000,
+    # Switch off the other terms by setting their weightings to zero.
+    sum_weighting=0,
+    difference_weighting=0,
+    phase_weighting=0,
+    # Pass in the target reflectivity.
+    target_reflectivity_s=target_reflectivity,
+    target_reflectivity_p=target_reflectivity
+)
+
+# Run the calculation.
+runner = Runner(**kwargs)
+runner.run()
+```
