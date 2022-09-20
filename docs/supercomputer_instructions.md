@@ -15,7 +15,7 @@ ssh <username>@login-cpu.hpc.cam.ac.uk
 ```
 gets the user into a 'login node' (which has 32 cores and 6GB of RAM per core). Login nodes are usually for preparing code and files for job submission, e.g. compiling code or doing short test runs. They are identical to a single node on the supercomputer.
 
-Longer computing jobs are not supposed to be run on a login node. Login nodes are being monitored by a watchdog script to prevent this, which can terminate processes.
+Longer computing jobs (longer than ~1h or multicore jobs) are not supposed to be run on a login node. Login nodes are being monitored by a watchdog script to prevent this, which can terminate processes.
 
 
 ### File system
