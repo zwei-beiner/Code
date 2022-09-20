@@ -353,7 +353,7 @@ For any run, the code generates the following output:
 
 | Output file/directory | Type | Description |
 |--|--|--
-| `critical_thicknesses_plot.pdf` | File | For each layer, a plot of <ul><li>the thickness $d_\mathrm{optimal}$ found in the global optimisation (orange line)</li><li>the critical thickness $d_\text{critical}$ (blue line)</li></ul> as functions of wavelength are shown. If the orange line lies below the blue line for all wavelengths, then the layer can be regarded as negligibly thin and taken out of the multilayer stack. This is done automatically by the code.
+| `critical_thicknesses_plot.pdf` | File | For each layer, a plot of <ul><li>the thickness $d_\mathrm{optimal}$ found in the global optimisation (orange line)</li><li>the critical thickness $d_\text{critical}$ (blue line)</li></ul> as functions of wavelength are shown. </br>If the orange line lies below the blue line for all wavelengths, then the layer can be regarded as negligibly thin and taken out of the multilayer stack. This is done automatically by the code.
 | `marginal_distributions_plot.pdf` | File |The distribution of the parameter values of the dead points are shown.</br> Ideally, as PolyChord converges to the global minimum of the merit function, the distributions should be unimodal and sharply peaked.
 | `merit_function_plot.pdf` | File |For each iteration of PolyChord, the largest merit function value of the current set of live points is plotted. </br>Ideally, the merit function should initially decrease rapidly, followed by gradual convergence as the parameter space is compressed to the neighbourhood of the global minimum of the merit function.
 |`optimal_merit_function_value.txt`| File| The merit function value after the local optimisation has completed.
