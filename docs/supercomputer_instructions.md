@@ -22,7 +22,7 @@ Longer computing jobs (longer than ~1h or multicore jobs) are not supposed to be
 
 There are two available directories.
 
-For non-computing (e.g. editing reports,...) work
+For non-computing work (e.g. editing reports,...) 
 ```shell
 /home/<username>/
 ```
