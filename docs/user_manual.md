@@ -339,9 +339,9 @@ runner = Runner(**kwargs)
 runner.run()
 ```
 
-### Output files
+## Output files
 
-The code generates the following output:
+For any run, the code generates the following output:
 
 | Output file/directory | Type | Description |
 |--|--|--
