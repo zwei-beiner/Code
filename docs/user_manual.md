@@ -4,6 +4,14 @@ This manual provides instructions on how to set up a multilayer coating calculat
 
 In the following, the types `Callable` and `Union` from the Python `typing` library will be used.
 
+This user manual describes
+1. How to compile the Cython files,
+2. How to set the parameters of a multilayer calculation exemplified with a 5-layer coating,
+3. How to run the calculation,
+4. Useful functions in the `Utils` class,
+5. A non-trivial example calculation with separate wavelength intervals,
+6. The output files generated during a run.
+
 ## Compiling the Cython files
 
 First, it should be ensured that the Cython files are compiled to `.so` files.
