@@ -270,14 +270,16 @@ The `main.py` file is:
 
 ```python 
 import numpy as np
+
+# Compile Cython files.
 from calculation.Compiler import compile_cython_files
+compile_cython_files()
+
+
+# Code which uses the Cython numerical routines can only be imported after Cython files have been compiled.
 from calculation.Utils import Utils
 from calculation.RefractiveIndices import Materials
 from calculation.Runner import Runner
-from calculation.Optimiser import Optimiser
-
-
-compile_cython_files()
 
 M = 20
 # Don't include materials which have absorption peak in the wavelength range.
