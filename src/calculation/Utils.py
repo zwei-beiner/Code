@@ -1,7 +1,5 @@
 import numpy as np
 from WrapperClasses import RefractiveIndex
-import scipy.stats
-from pypolychord.priors import UniformPrior
 
 
 class Utils:
@@ -15,11 +13,18 @@ class Utils:
 
     @staticmethod
     def take_layers_out(layer_specification: tuple[tuple], indices: list[int]) -> tuple[tuple]:
+        """
+        Removes layers in 'indices' from the 'layer_specification'.
+        """
         return tuple(t for i, t in enumerate(layer_specification) if i not in indices)
 
 
     @staticmethod
     def constant(val: float) -> RefractiveIndex:
+        """
+        Returns a constant function.
+        """
+
         def n(wavelengths: np.ndarray) -> np.ndarray:
             return np.full(len(wavelengths), val)
         return n
@@ -27,6 +32,10 @@ class Utils:
 
     @staticmethod
     def sellmeier_equation(Bs: list[float], Cs: list[float]) -> RefractiveIndex:
+        """
+        Implements the Sellmeier equation with arbitrary number of B's and C's.
+        """
+
         Bs = np.array(Bs)
         Cs = np.array(Cs)
         if len(Bs) != len(Cs):
