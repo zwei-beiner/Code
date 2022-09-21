@@ -2,11 +2,22 @@ cimport numpy as np
 import numpy as np
 
 cdef class PrecomputedValues:
+    """
+    Class which stores precomputed values for a set of wavelengths.
+    Essentially, this means that all functions of wavelength are turned into arrays which store the function
+    values at each wavelength.
+    """
+
+    # Number of layers
     cdef int M
+    # Number of wavelengths. This determines the length of the arrays used.
     cdef int num_wavelengths
 
+    # Store n_outer at each wavelength
     cdef double[:] n_outer
+    # Store n_substrate at each wavelength
     cdef double[:] n_substrate
+    # Wavelengths
     cdef double[:] wavelengths
     # Store refractive index arrays as 2D array, and each entry an array n(wavelength).
     # First index: which layer?. Second index: which refractive index?
@@ -18,6 +29,7 @@ cdef class PrecomputedValues:
     cdef double difference_weighting
     cdef double phase_weighting
 
+    # Store the parameters of the merit function for all wavelengths.
     cdef double[:] target_reflectivity_s
     cdef double[:] target_reflectivity_p
     cdef double[:] target_sum
@@ -31,12 +43,11 @@ cdef class PrecomputedValues:
 
     def __init__(self, int M, object n_outer, object n_substrate, double[:] wavelengths, object layer_specification, object m):
         """
-
-        @param M:
+        @param M: Number of layers
         @param n_outer: Type is Callable[[np.ndarray], np.ndarray]
         @param n_substrate: Type is Callable[[np.ndarray], np.ndarray]
-        @param wavelengths:
-        @param layer_specification:
+        @param wavelengths: Array of wavelengths
+        @param layer_specification: Type is tuple[list[RefractiveIndex]]
         @param m: Type is MeritFunctionSpecification
         """
 
@@ -46,11 +57,14 @@ cdef class PrecomputedValues:
         self.M = M
         self.wavelengths = wavelengths
         self.num_wavelengths = len(wavelengths)
+        # Evaluate n_outer and n_substrate at the wavelengths.
         self.n_outer = n_outer(wavelengths)
         self.n_substrate = n_substrate(wavelengths)
 
-        # Example layer specification:
+        # Example for 'layer_specification':
         # ([lambda x: np.full(len(x), 1.3)], [lambda x: np.full(len(x), 2, dtype=np.float_), lambda x: np.full(len(x), 3.), lambda x: np.full(len(x), 4.)])
+        # Store an array of numpy arrays. This is not a 2D numpy array because the 1D arrays have different lengths
+        # because the sets of wavelengths have different numbers of wavelengths in them.
         self.ns = np.empty((M, ), dtype=object)
         cdef int i
         for i in range(len(layer_specification)):
@@ -76,13 +90,3 @@ cdef class PrecomputedValues:
 
     def __str__(self):
         return f'{self.num_wavelengths}'
-
-
-    # cpdef np.ndarray [double, ndim=2] ns_at_optimal_indices(self, np.ndarray [long, ndim=1] optimal_n):
-    #     cdef np.ndarray [double, ndim=2] ns = np.zeros((self.M, self.num_wavelengths))
-    #
-    #     cdef int i
-    #     for i in range(self.M):
-    #         ns[i, :] = self.ns[i][optimal_n[i]]
-    #
-    #     return ns
