@@ -1,3 +1,10 @@
+# This file provides all refractive indices found on the web, i.e. from Wikipedia in the article 'Sellmeier_equation'
+# and the OpenFilter software. The source of the data is given in each function.
+# Where it was possible, the refractive index as a function of wavelength was fitted to the Sellmeier equation.
+# If this was not possible, because the shape of the refractive index could not be well approximated by the Sellmeier
+# equation, or because absorption peaks were in the wavelength range (visible as peaks in the refractive index), the
+# data (refrative index vs. wavelength) is stored in a '.csv' file in the 'materials' folder and interpolated.
+
 import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
@@ -339,6 +346,8 @@ class Materials:
 
 
 if __name__ == '__main__':
+    # Plot all refractive indices.
+
     import matplotlib.pyplot as plt
     funcs = [Substrates.Infrasil301,
         Materials.Nb2O5, Materials.SiO2, Materials.MgF2, Materials.Ta2O5, Materials.Ag, Materials.Al, Materials.Au,
