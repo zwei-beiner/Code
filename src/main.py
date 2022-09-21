@@ -2,25 +2,17 @@ from pathlib import Path
 
 import numpy as np
 
-from calculation.Compiler import compile_cython_files
-from calculation.Utils import Utils
-
 
 def main():
+    from calculation.Compiler import compile_cython_files
     compile_cython_files()
-
-    import sys
-    # Add subdirectory manually to sys.path. This is necessary because we can't place an __init__.py file into
-    # the subdirectory, as this breaks Cython (this is a known Cython bug)
-    # This enables us to import modules from the subdirectory directly, e.g. 'import reflectivity_c_file'
-    sys.path.insert(1, str(Path(__file__).parent / 'calculation'))
-    sys.path.insert(1, str(Path(__file__).parent / 'calculation' / 'cython_files'))
 
     # Run the calculation
     run()
 
 
 def run():
+    from calculation.Utils import Utils
     from calculation.Runner import Runner
     from calculation.Optimiser import Optimiser
 
@@ -78,6 +70,9 @@ def run():
 
     runner = Runner(**kwargs)
     runner.run()
+
+    # optimiser.run_global_optimisation()
+    # optimiser.do_clustering()
 
 
 
