@@ -21,6 +21,16 @@ from MeritFunctionSpecification import MeritFunctionSpecification
 
 
 class Optimiser:
+    """
+    Handles all computations. These are:
+    - running the global optimisation using PolyChord (self.run_global_optimisation())
+    - running the local optimisation (self.run_local_optimisation())
+    - plotting of results (self.make_all_plots())
+    - clustering of PolyChord samples (self.do_clustering())
+    - decision whether layers can be taken out (self.rerun()) and instantiation of the new Optimiser object for the
+      optimisation problem with fewer layers (self.get_new_optimiser())
+    """
+
     def __init__(self, project_name: str,
                  M: int,
                  n_outer: RefractiveIndex,
@@ -44,9 +54,35 @@ class Optimiser:
                  weight_function_sum: Callable[[np.ndarray], np.ndarray] = lambda x: np.ones(len(x)),
                  weight_function_difference: Callable[[np.ndarray], np.ndarray] = lambda x: np.ones(len(x)),
                  weight_function_phase: Callable[[np.ndarray], np.ndarray] = lambda x: np.ones(len(x))):
-
+        """
+        @param project_name: Name of the project
+        @param M: Number of layers
+        @param n_outer: Refractive index of the outer medium
+        @param n_substrate: Refractive index of the substrate
+        @param theta_outer: Incident angle in the outer medium
+        @param wavelengths: Wavelengths specification
+        @param n_specification: Specification of constraints for the layer refractive indices
+        @param d_specification: Specification of constraints for the layer thicknesses
+        @param p_pol_weighting: w_{R_p}
+        @param s_pol_weighting: w_{R_s}
+        @param sum_weighting: w_S
+        @param difference_weighting: w_D
+        @param phase_weighting: w_{\phi_{sp}}
+        @param target_reflectivity_s: \tilde{R}_s
+        @param target_reflectivity_p: \tilde{R}_p
+        @param target_sum: \tilde{S}
+        @param target_difference: \tilde{D}
+        @param target_relative_phase: \tilde{\phi}_{sp}
+        @param weight_function_s: \delta R_s
+        @param weight_function_p: \delta R_p
+        @param weight_function_sum: \delta S
+        @param weight_function_difference: \delta D
+        @param weight_function_phase: \delta \phi_{sp}
+        """
 
         self._project_name = project_name
+        # Path to the root directory in which all output is saved. Ensures that if the calculation is rerun with fewer
+        # layers, the output results are saved to a different directory.
         self._root: Path = Path.cwd() / self._project_name / f'{M}_layers'
 
         self._M = M
@@ -55,11 +91,13 @@ class Optimiser:
         self._theta_outer = theta_outer
         self._wavelengths = Wavelength_constraint(wavelengths)
 
+        # Check if the layer specifications have the correct length.
         if len(n_specification) != self._M or len(d_specification) != self._M:
             raise Exception(f'Invalid specification length: {len(n_specification), len(d_specification), self._M}')
         self._n_constraints = n_constraints(n_specification)
         self._d_constraints = d_constraints(d_specification)
 
+        # Create object which stores all the parameters of the merit function.
         self._merit_function_specification = MeritFunctionSpecification(
             s_pol_weighting=s_pol_weighting,
             p_pol_weighting=p_pol_weighting,
@@ -78,16 +116,28 @@ class Optimiser:
             weight_function_phase=weight_function_phase
         )
 
-        # Number of parameters to be optimised
+        # Number of parameters to be optimised. This is 'p+q' in the report.
         self._nDims = len(self._n_constraints.get_unfixed_indices()) + len(self._d_constraints.get_unfixed_indices())
-        # Index which is used to split parameter array between n (index < split) and d (index > split)
+        # Index which is used to split parameter array between n (index < split) and d (index > split).
+        # This is the integer 'p' in the report.
         self._split = len(self._n_constraints.get_unfixed_indices())
 
+        # Maximum possible thickness, which is the sum of all upper limits on the layer thicknesses. This is passed
+        # to the Cython object 'BackendCalculations' which uses it to determine how many sets of wavelengths
+        # to pre-allocate.
         D_max: float = self._d_constraints.get_D_max()
+        # Minimum and maximum wavelengths in the problem.
         min_wavelength, max_wavelength = self._wavelengths.get_min_max()
+        # Prepare refractive index layer specification to pass to the Cython class 'BackendCalculations', which requires
+        # a different format: The refractive indices of each layer must be in a list, regardless of whether the
+        # constraint if fixed or categorical, i.e. the values of the fixed constraints must be put into a list.
         layer_specification: tuple[list[RefractiveIndex], ...] = tuple(
             val if (type(val) is list) else [val] for _, val in self._n_constraints.get_specification())
 
+        # Create the Cython object 'BackendCalculations' which pre-allocates all arrays for the wavelengths and
+        # refractive indices (automatic wavelength calculations, optionally the manually specified wavelengths,
+        # arrays of length 1000 for high-resolution plotting). The Cython object also handles all the heavy numerical
+        # calculation and provides the calculation of the merit function and the prior function.
         self.backend_calculations = BackendCalculations(
             self._M, self._n_outer, self._n_substrate, self._theta_outer, D_max, min_wavelength, max_wavelength,
             layer_specification, self._merit_function_specification,
@@ -98,56 +148,118 @@ class Optimiser:
             self._split, self._nDims, self._wavelengths.get_values() if self._wavelengths.is_fixed() else None
         )
 
-        # PolyChord settings file. Initialised in self.run_global_optimisation().
+        # PolyChord settings file. Initialised in self.run_global_optimisation() and used again in self.do_clustering().
         self.settings: pypolychord.settings.PolyChordSettings = None
 
 
     @property
     def M(self):
+        """
+        Getter for self._M
+        """
         return self._M
 
 
     def _build_likelihood_and_prior(self):
+        """
+        Returns two functions: The likelihood (which is the negative of the merit function) and the prior function
+        (which technically is the transformation from the unit hypercube to the parameter space, required by PolyChord
+        for sampling).
+        """
+
+        # Choose here whether the merit function should be used which uses the manually specified set of wavelengths
+        # (then the wavelengths are 'fixed') or whether to use the merit function which uses the automatic wavelength
+        # calculation.
+        # The choice is made here during initialisation instead of inside the Cython function, because
+        # an additional if/else inside the Cython function would make the calculation slower. On the other hand, this
+        # means that the two Cython functions 'merit_function_fixed_wavelength' and 'merit_function_auto_wavelength'
+        # have almost identical code, which can be dangerous when refactoring the code as the programmer could
+        # accidentally forget to refactor the other function after making a change in one function.
         if self._wavelengths.is_fixed():
             merit_function = self.backend_calculations.merit_function_fixed_wavelength
         else:
             merit_function = self.backend_calculations.merit_function_auto_wavelength
 
+        # Create the likelihood function. Since PolyChord is function maximiser, but the merit function must be
+        # the negative of the merit function must be passed to PolyChord.
+        # The second return value '[]' contains what PolyChord calls the derived parameters, which can be any function
+        # of 'params'. Here, we are not interested in any derived parameters so that the list remains empty.
+        # Correspondingly, in the function 'self.run_global_optimisation()', 'nDerived=0' must be passed to the
+        # PolyChord settings file.
         def likelihood(params):
-            # print('called likelihood with params = ', params)
             return -merit_function(params), []
 
         return likelihood, self.backend_calculations.prior
 
 
-    def run_global_optimisation(self):
+    def run_global_optimisation(self) -> None:
+        """
+        Runs the global optimisation with PolyChord.
+        """
+
         likelihood, prior = self._build_likelihood_and_prior()
         nDerived = 0
+        # The number of iterations is set to be 'niter * nDims * nlive' which provides proper scaling of the runtime
+        # with the dimensionality of the optimisation problem.
+        # Empirically, the number of PolyChord iterations to show convergence of the likelihood function has been
+        # determined to be niter=5.
+        # Alternatively, one could implement an automatic check if the likelihood has converged by detecting
+        # whether a likelihood vs iterations plot flattens off.
         niter = 5
 
+        # Prepare the PolyChord settings file.
         self.settings = pypolychord.settings.PolyChordSettings(self._nDims, nDerived)
         self.settings.nlive = self.settings.nlive
+        # If the directory 'polychord_output' exists, it is assumed that a previous run has been interrupted and that
+        # the run should be resumed from the already generated data.
         self.settings.read_resume = True if (self._root / 'polychord_output').is_dir() else False
-        # settings.maximise = True
+
+        # At this point, it would be possible to set 'settings.maximise = True', which would cause PolyChord to
+        # do a local optimisation after the global optimisation itself, using the Nelder-Mead simplex algorithm. Instead
+        # for flexibility and to inspect unfinished runs, a custom local minimiser is used instead in
+        # 'self.run_local_optimisation()'.
+
+        # Set the maximum number of iterations (= maximum number of dead points).
         self.settings.max_ndead = int(niter * self._nDims * self.settings.nlive)  # TODO: Check if likelihood converged
         print(f'Maximum number of dead points: {self.settings.max_ndead}')
         sys.stdout.flush()
+        # Switch off the default termination criterion of PolyChord, which terminates when the relative change in the
+        # evidence Z falls below 'precision_criterion'.
         self.settings.precision_criterion = -1
+        # Print the maximum amount of information to stdout for diagnostic purposes.
         self.settings.feedback = 3
+        # Set the base directory into which PolyChord writes its files.
         self.settings.base_dir = str(self._root / 'polychord_output')
 
+        # Run PolyChord. This is the most computationally intensive part of the entire program.
         pypolychord.run_polychord(likelihood, self._nDims, nDerived, self.settings, prior)
         print('PolyChord run completed.')
         sys.stdout.flush()
 
 
     def calculate_critical_thicknesses(self, optimal_n: np.ndarray):
+        """
+        With the optimal solution of the refractive indices found by the optimisation, return a two-dimesional numpy
+        array containing the critical thicknesses for all layers (axis 0) and all wavelengths (axis 1).
+        This is used to determine whether layers can be removed from the multilayer stack.
+        """
+
+        # Call a Cython function for heavy computation.
         return self.backend_calculations.calculate_critical_thicknesses(optimal_n)
 
 
     def which_layers_can_be_taken_out(self, optimal_n: np.ndarray, optimal_d: np.ndarray) -> list[int]:
+        """
+        Return a list of indices which are the layers which can be taken out. E.g. [1,4,7] would denote that layers
+        1, 4 and 7 can be removed from the multilayer stack.
+        @param optimal_n: Optimal refractive indices found by the optimisation
+        @param optimal_d: Optimal thicknesses found by the optimisation
+        @return:
+        """
+
         # Layer can be taken out for which d < d_crit for all wavelengths.
         d_crit = self.calculate_critical_thicknesses(optimal_n)
+        # Compute the minimum across all wavelengths, for each layer.
         d_crit_max = np.amin(d_crit, axis=1)
         return np.argwhere(optimal_d < d_crit_max).flatten().tolist()
 
@@ -156,6 +268,8 @@ class Optimiser:
         """
         Returns True if optimisation should be rerun with fewer layers.
         """
+
+        # Read the optimisation results.
         df = pd.read_csv(self._root / 'optimal_parameters.csv')
         optimal_n: np.ndarray = np.int_(df['n'].values)
         optimal_d: np.ndarray = df['d(nm)'].values * 1e-9
@@ -166,19 +280,33 @@ class Optimiser:
 
 
     def plot_critical_thicknesses(self, show_plot: bool, save_plot: bool, root: Path) -> None:
+        """
+        Create plots for each layer with the critical thickness as a function of wavelength and the optimal thickness
+        returned by the optimiser, plotted as a constant value against wavelength.
+        This serves as a diagnostic plot to see which layers can be regarded as negligibly thin.
+        """
+
+        # Read the optimisation results.
         df = pd.read_csv(root / 'optimal_parameters.csv')
         n: np.ndarray = np.int_(df['n'].values)
+        # Calculate d_critical
         d_crit = self.calculate_critical_thicknesses(n)
+        # Calculate d_optimal
         d: np.ndarray = df['d(nm)'].values * 1e-9
 
+        # Create the plot.
         fig: plt.Figure
+        # Make the grid of subplots approximately square.
         nrows = np.int_(np.floor(np.sqrt(self._M)))
         ncols = int(self._M // nrows + (1 if self._M % nrows != 0 else 0))
         fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3 * nrows))
+        # Iterate through all subplots. Each subplot corresponds to a layer.
         for i, ax in enumerate(fig.axes):
             if i < self._M:
                 ax: plt.Axes
+                # Get d_critical as a function of wavelength, for this layer.
                 d_crit_wavelengths = d_crit[i, :]
+                # Create the data for the x-axis.
                 wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=len(d_crit_wavelengths))
                 ax.plot(wavelengths * 1e9, d_crit_wavelengths * 1e9, label=r'$d_\mathrm{critical}$')
                 ax.plot(wavelengths * 1e9, np.full(len(wavelengths), d[i]) * 1e9, label=r'$d_\mathrm{optimal}$')
@@ -199,15 +327,22 @@ class Optimiser:
         if save_plot:
             fig.savefig(root / 'critical_thicknesses_plot.pdf')
 
+        # Close the figure to deallocate the figure object. Otherwise, during the plotting which occurs in
+        # 'self.do_clustering()', the RAM becomes exhausted becayse plt.pyplot keeps all Figure objects which makes
+        # it not possible for the garbage collector to deallocate the Figure objects.
         plt.close(fig)
         # return fig, axes
 
 
     def _get_max_row_id(self) -> int:
         """
-        Returns n_dead.
+        Returns n_dead from the 'test.resume' file.
 
-        @param dataframe: Weighted dataframe returned by anesthetic package.
+        This is important because, if a run is unfinished, PolyChord might not have finished writing all the live
+        points, which the 'anesthetic' package then reads as lots of zeroes. To prevent this from happening, the
+        last fully saved PolyChord iteration is extracted from the 'test.resume' file (which is the number in
+        line 5 of that file) and this number is returned. Later on, this is used to truncate the weighted dataframe
+        returned by 'anesthetic' and remove any invalid PolyChord output.
         """
         row_id = -1
         with open(str(self._root / 'polychord_output' / 'test.resume')) as f:
@@ -223,17 +358,40 @@ class Optimiser:
 
 
     def _locally_minimise(self, initial_guess: np.ndarray) -> tuple[np.ndarray, float]:
-        # merit_function, _ = self._build_merit_function_and_prior()
+        """
+        Runs a 'scipy' local optimiser on the merit function, starting from an initial guess. This method is called
+        once after the global optimisation has finished, and is called very often for each cluster found by
+        'self.do_clustering()'.
+
+        @param initial_guess: Initial guess to be used for local optimisation.
+        @return: The optimal value of 'params' found by the local optimiser and the corresponding merit function value.
+        """
+
+        # Get the merit function as the negative of the likelihood. 'scipy' minimises, so that it can be used
+        # directly on the merit function (unlike PolyChord, which maximises).
         merit_function = lambda params: -((self._build_likelihood_and_prior()[0])(params)[0])
 
+        # Use bounds so that the local minimiser does not step outside the bounded constraints for the thicknesses
+        # or find integers for the refractive indices for which no refractive indices were originally specified.
+        # Note: the '+' here is list concatenation.
+        # The first list is a list of constraints for each refractive index. Since the scipy minimiser works with
+        # floats, but the variables are integers, we set the bounds such that all integers are reachable.
+        # For example, if a layer has 3 refractive indices to choose from, the optimal solution should be one of
+        # {0, 1, 2}. We use the trick that the minimisation is bounded in the interval (0., 2.9) so that the integers
+        # {0, 1, 2} are reachable by the scipy minimiser. Note that the value 0.9 is arbitrary and one could have
+        # chosen e.g. 0.3 or 0.77 to the same effect.
+        # The bounds on the thicknesses are simply those already specified in the constructor of this 'Optimiser'
+        # object.
         bounds = [(0, (len(val) - 1) + 0.9) for val in
                   self._n_constraints.get_unfixed_values()] + self._d_constraints.get_unfixed_values()
 
         def wrapped_merit_function(params: np.ndarray) -> float:
             split = len(self._n_constraints.get_unfixed_indices())
+            # Turn the refractive index input into integers by calling np.floor on them.
             params[:split] = np.floor(params[:split])
             return merit_function(params)
 
+        # Run local optimisation.
         res: scipy.optimize.OptimizeResult = scipy.optimize.minimize(wrapped_merit_function, initial_guess,
                                                                      method='Nelder-Mead', bounds=bounds)
         optimal_params = res.x
@@ -246,6 +404,14 @@ class Optimiser:
 
 
     def _write_to_file(self, optimal_params: np.ndarray, optimal_merit_function_value: float, root: Path) -> None:
+        """
+        Writes the result of the optimisation to files.
+
+        @param optimal_params: Optimal parameters
+        @param optimal_merit_function_value: Optimal merit function value
+        @param root: Directory to save files to.
+        """
+        # Fill positions where the refractive indices are fixed with 0.
         n = np.zeros(self._M, dtype=np.int_)
         n[self._n_constraints.get_fixed_indices()] = 0
         n[self._n_constraints.get_unfixed_indices()] = np.int_(optimal_params[:self._split])
@@ -265,6 +431,10 @@ class Optimiser:
 
 
     def run_local_optimisation(self) -> None:
+        """
+        Runs the local minimisation after the global minimisation has completed.
+        """
+
         dataframe = anesthetic.NestedSamples(root=str(self._root / 'polychord_output/test'))
 
         # Restrict dataframe up to where last iteration of PolyChord was performed.
@@ -293,11 +463,17 @@ class Optimiser:
         The plot should show a decreasing function which flattens out.
         """
 
+        # Read in PolyChord samples as a weighted data frame (which is a custom class defined in the 'anesthetic'
+        # package which inherits from a 'pandas' DataFrame but each row is specified by a pair: the row index and a
+        # weight between 0 and 1).
         dataframe = anesthetic.NestedSamples(root=str(self._root / 'polychord_output/test'))
 
+        # Get the last row in the data frame which PolyChord has definitely finished writing to.
         row_id = self._get_max_row_id()
 
+        # Get the merit function values (including the row 'row_id' which is the reason for the '+1')
         merit_function_values = -dataframe['logL'].iloc[:(row_id + 1)].values
+        # x-axis is the PolyChord iteration
         x = np.arange(len(merit_function_values))
 
         fig: plt.Figure
@@ -341,18 +517,14 @@ class Optimiser:
         @return: plt.Figure and plt.Axes objects.
         """
 
-        # Create array containg the optimal solution (indices of which n's to pick and values of d)
+        # Create array containing the optimal solution (indices of which n's to pick and values of d)
         df = pd.read_csv(root / 'optimal_parameters.csv')
         optimal_n = (df['n'].values)[self._n_constraints.get_unfixed_indices()]
         optimal_d = (df['d(nm)'].values * 1e-9)[self._d_constraints.get_unfixed_indices()]
 
-        # Create array of wavelengths which will be the x-axis values in the plot.
-        # wavelengths = np.linspace(*self._wavelengths.get_min_max(), num=1000)
-        # Get the amplitude function. Named 'amplitude_wrapper' to avoid confusion with other function defined later
-        # which does the same calculation but takes different function arguments.
-        # amplitude_wrapper, _ = self._build_amplitude_function()
-
+        # Array of wavelengths which will be the x-axis values in the plot.
         wavelengths, res = self.backend_calculations.robustness_analysis(optimal_n, optimal_d)
+        # Extract central value (evaluated at optimal_d), and lower and upper error bars.
         means_s, lower_s, upper_s = res[0, :, :]
         means_p, lower_p, upper_p = res[1, :, :]
         means_sum, lower_sum, upper_sum = res[2, :, :]
@@ -654,7 +826,6 @@ class Optimiser:
                 # Skip indices which will be dropped.
                 if i not in indices_to_drop:
                     for j in range(i + 1, len(X)):
-                        print(X[i], X[j], np.allclose(X[i], X[j], rtol=1e-02, atol=1e-12))
                         if are_the_same(X[i], X[j]):
                             indices_to_drop.append(j)
             return indices_to_drop
