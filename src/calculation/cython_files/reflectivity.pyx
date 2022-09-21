@@ -23,9 +23,6 @@ cdef class reflectivity_namespace:
     See https://stackoverflow.com/questions/56560007/building-python-package-containing-multiple-cython-extensions/56807269#56807269
     """
 
-# cpdef np.ndarray [double, ndim=1] reflectivity_automatic_wavelength(int polarisation, int M, np.ndarray[double, ndim=1] n, np.ndarray[double, ndim=1] d, double min_wavelength, double max_wavelength, double n_outer, double n_substrate, double theta_outer):
-#     return reflectivity_at_wavelengths(polarisation, M, n, d, calculate_wavelengths(min_wavelength, max_wavelength, d), n_outer, n_substrate, theta_outer)
-
     cpdef complex[:] amplitude_at_wavelengths(self, int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, np.ndarray [double, ndim=1] wavelengths, double n_outer, double n_substrate, double theta_outer):
         # Cython does not allow np.float_ inside the square brackets, only the type 'double'. But Cython does not allow
         # dtype=double. Hence, we must use 'double' in the square brackets and 'dtype=np.float_'. This is not a problem
@@ -59,28 +56,6 @@ cdef class reflectivity_namespace:
 
         cdef double[:] wave = wavelengths
         return wavelengths
-
-
-    # cpdef double reflectivity(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, double wavelength, double n_outer,
-    #                  double n_substrate, double theta_outer):
-    #     """
-    #     Calculates the reflectivity.
-    #     Function arguments are the same as for 'ampltiude()'.
-    #
-    #     @return: Reflectivity |amplitude|^2
-    #     """
-    #     return np.abs(amplitude(polarisation,  M, n, d, wavelength, n_outer, n_substrate, theta_outer)) ** 2
-    #
-    #
-    # cpdef double phase(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, double wavelength, double n_outer,
-    #                  double n_substrate, double theta_outer):
-    #     """
-    #     Calculates phase of the reflected complex amplitude.
-    #     Function arguments are the same as for 'ampltiude()'.
-    #
-    #     @return: Phase in the range (-pi, pi]
-    #     """
-    #     return np.angle(amplitude(polarisation,  M, n, d, wavelength, n_outer, n_substrate, theta_outer))
 
 
     cpdef complex amplitude(self, int polarisation, int M, double[:] n, double[:] d, double wavelength, double n_outer,
