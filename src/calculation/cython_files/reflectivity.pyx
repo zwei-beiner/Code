@@ -74,7 +74,7 @@ cdef class reflectivity_namespace:
         return x[0]
 
 
-cpdef np.ndarray [complex, ndim=2] _make_matrix(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, double k_outer, double n_outer, double n_substrate, double theta_outer):
+cpdef np.ndarray [complex, ndim=2] _make_matrix(int polarisation, int M, np.ndarray [double, ndim=1] n, np.ndarray [double, ndim=1] d, double k_vac, double n_outer, double n_substrate, double theta_outer):
     """
     Constructs the matrix \mathbf{M} in band structure form.
 
@@ -82,8 +82,7 @@ cpdef np.ndarray [complex, ndim=2] _make_matrix(int polarisation, int M, np.ndar
     @param M: Number of layers. Valid input range: M ≥ 1
     @param n: Array storing the refractive indices of the layers.
     @param d: Array storing the thicknesses of the layers.
-    @param k_outer: Wavenumber "2*pi/lambda" of the incident light in the outer medium. lambda is wavelength in the
-    outer medium
+    @param k_outer: Wavenumber "2*pi/lambda" of the incident light in vacuum. lambda is wavelength in vacuum.
     @param n_outer: Refractive index of the outer medium.
     @param n_substrate: Refractive index of the substrate.
     @param theta_outer: Angle in the outer medium, i.e. incident angle. Valid range: -pi/2 < theta_outer < pi/2
@@ -95,7 +94,7 @@ cpdef np.ndarray [complex, ndim=2] _make_matrix(int polarisation, int M, np.ndar
     cdef complex cos_theta_substrate = csqrt(1 - (n_outer / n_substrate) ** 2 * sin(theta_outer) ** 2)
 
     # Pre-compute complex exponentials for performance increase.
-    cdef np.ndarray [complex, ndim=1] exps = np.exp(1j * (k_outer * d) * (n / n_outer) * cos_theta)
+    cdef np.ndarray [complex, ndim=1] exps = np.exp(1j * (k_vac * d) * n * cos_theta)
 
     cdef np.ndarray [complex, ndim=2] mat = np.zeros((5, 2*M+2), dtype=complex)
 

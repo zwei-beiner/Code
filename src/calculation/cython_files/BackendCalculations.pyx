@@ -493,7 +493,7 @@ cdef class BackendCalculations:
         for i in range(self.M):
             n = np.float64(p.ns[i][optimal_n[i]])
             cos_theta = np.sqrt(np.complex_(1 - (n_outer / n) ** 2 * np.sin(self.theta_outer) ** 2))
-            k_x = 2 * np.pi / wavelengths * (n / n_outer) * cos_theta
+            k_x = 2 * np.pi / wavelengths * n * cos_theta
             d_crit[i, :] = np.abs(1 / k_x)
 
         return 0.01 * d_crit
