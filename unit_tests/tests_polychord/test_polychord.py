@@ -17,7 +17,7 @@ import anesthetic
 import anesthetic.utils
 from anesthetic.gui.plot import RunPlotter
 
-from src.optimiser import output_results, plot
+# from src.optimiser import output_results, plot
 
 
 class Test_reflectivity(TestCase):
@@ -33,9 +33,23 @@ class Test_reflectivity(TestCase):
             # Uniform prior
             return pypolychord.priors.UniformPrior(-5, 5)(unit_cube)
 
-        nDims = 2
+        nDims = 3
 
-        settings = output_results(loglikelihood, nDims, prior, 10, False)
+        nDerived = 0
+        niter = 20
+
+        settings = pypolychord.settings.PolyChordSettings(nDims, nDerived)
+        settings.nlive = 10 * settings.nlive
+        settings.read_resume = False
+        # settings.maximise = True
+        settings.max_ndead = int(niter * nDims * settings.nlive)  # TODO: Check if likelihood converged
+        print(f'Maximum number of dead points: {settings.max_ndead}')
+        settings.precision_criterion = -1
+        settings.feedback = 3
+        settings.base_dir = str('polychord_output')
+
+        pypolychord.run_polychord(loglikelihood, nDims, nDerived, settings, prior)
+        print('PolyChord run completed.')
 
         samples = anesthetic.NestedSamples(root=str(Path(settings.base_dir) / settings.file_root))
         np.random.seed(71)
@@ -44,7 +58,6 @@ class Test_reflectivity(TestCase):
         ks = anesthetic.utils.insertion_p_value(samples.insertion, settings.nlive)
         print(ks['p-value'])
 
-        plot(settings)
 
     def test_4d_rosenbrock(self):
         # Expected global optimum: (1,1,1,1)
