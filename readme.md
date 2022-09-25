@@ -1,3 +1,5 @@
+Coating is a code for the design of optimal thin-film multilayer coatings.
+
 ## Documentation
 
 - For instructions on how to run the code on a supercomputer, specifically the CSD3 cluster, [see here](https://github.com/zwei-beiner/Code/blob/master/docs/supercomputer_instructions.md).
