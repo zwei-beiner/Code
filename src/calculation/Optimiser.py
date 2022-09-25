@@ -713,9 +713,8 @@ class Optimiser:
             # adding the transpose, noting that the unfilled values were initialised to zero.
             d = d + d.T
             # Shift values into the range [0, 1].
-            min = np.amin(d)
             max = np.amax(d)
-            d = (d - min) / (max - min)
+            d = d / max
             # Store d in D.
             D[k] = d
 
